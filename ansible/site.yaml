@@ -216,3 +216,31 @@
         src: /etc/kubernetes/admin.conf
         dest: "{{ playbook_dir }}/kubeconfig/admin.conf"
         flat: true
+- name: Install kubeconfig locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Ensure ~/.kube exists
+      file:
+        path: "{{ lookup('env','HOME') }}/.kube"
+        state: directory
+        mode: "0700"
+
+    - name: Copy kubeconfig to ~/.kube
+      copy:
+        src: kubeconfig/admin.conf
+        dest: "{{ lookup('env','HOME') }}/.kube/k8s-lab.conf"
+        mode: "0600"
+
+    - name: Export KUBECONFIG in shell profile
+      lineinfile:
+        path: "{{ lookup('env','HOME') }}/.zshrc"
+        line: 'export KUBECONFIG=$HOME/.kube/k8s-lab.conf'
+        create: yes
+
+    - name: Point kubeconfig to master public IP
+      command: >
+        kubectl config set-cluster kubernetes
+        --server=https://{{ hostvars[groups['master'][0]].ansible_host }}:6443
+        --kubeconfig {{ lookup('env','HOME') }}/.kube/k8s-lab.conf

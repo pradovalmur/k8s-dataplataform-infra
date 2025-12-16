@@ -1,4 +1,72 @@
-*.tfvars
-# Ansible kubeconfig (credenciais do cluster)
+############################
+# Terraform (state / cache / secrets)
+############################
+# local state
+**/*.tfstate
+**/*.tfstate.*
+
+# terraform working dir
+**/.terraform/
+
+# crash logs
+crash.log
+crash.*.log
+
+# variables (usually secrets)
+**/*.tfvars
+**/*.tfvars.json
+!**/*.tfvars.example
+!**/*.tfvars.json.example
+
+# plan files
+**/*.tfplan
+**/*.plan
+
+# override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI config (if you ever use it)
+.terraformrc
+terraform.rc
+
+############################
+# Ansible
+############################
+ansible/**/*.retry
+
+# kubeconfig / admin.conf (credenciais)
 ansible/kubeconfig/
 ansible/**/admin.conf
+
+# inventory gerado (Terraform -> Ansible)
+ansible/inventory.ini
+
+############################
+# Kubernetes local configs
+############################
+.kube/
+*.kubeconfig
+
+############################
+# OS / IDE
+############################
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+############################
+# Python
+############################
+__pycache__/
+*.pyc
+.venv/
+
+############################
+# Logs
+############################
+*.log

@@ -23,6 +23,19 @@ module "k8s_fw" {
   allow_nodeport = false
 }
 
+module "lb_traefik" {
+  source   = "./modules/hcloud_lb"
+  name     = "k8s-lab-traefik"
+  location = "nbg1"
+
+  servers = module.hcloud_cluster.server_id_map
+
+  services = [
+    { name = "http",  protocol = "tcp", listen_port = 80,  destination_port = 30080 },
+    { name = "https", protocol = "tcp", listen_port = 443, destination_port = 30443 }
+  ]
+}
+
 resource "hcloud_ssh_key" "local_key" {
   name       = "local-ed25519"
   public_key = file("~/.ssh/id_ed25519.pub")
@@ -52,7 +65,7 @@ module "hcloud_cluster" {
 }
 
 resource "local_file" "ansible_inventory" {
-  filename = "${path.module}/ansible/inventory.ini"
+  filename = abspath("${path.root}/../ansible/inventory.ini")
   content  = <<-EOT
 [master]
 k8s-lab-master-1 ansible_host=${module.hcloud_cluster.master_public_ips[0]} private_ip=${module.hcloud_cluster.master_private_ips[0]}
