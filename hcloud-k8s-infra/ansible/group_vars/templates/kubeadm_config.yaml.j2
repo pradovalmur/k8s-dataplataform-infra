@@ -1,0 +1,15 @@
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+
+kubernetesVersion: {{ k8s_version_full }}
+
+controlPlaneEndpoint: "{{ hostvars[inventory_hostname][apiserver_private_ip_var] }}:6443"
+
+apiServer:
+  certSANs:
+    - {{ hostvars[inventory_hostname][apiserver_private_ip_var] }}
+    - {{ hostvars[inventory_hostname][apiserver_public_ip_var] }}
+    - 127.0.0.1
+
+networking:
+  podSubnet: {{ pod_network_cidr }}

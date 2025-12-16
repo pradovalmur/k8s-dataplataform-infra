@@ -15,7 +15,7 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: standard
+  storageClassName: hcloud-volumes
 
 ---
 apiVersion: apps/v1
