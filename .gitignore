@@ -1,1 +1,2 @@
 *.tfvars
+hcloud-k8s-infra/ansible/kubeconfig/admin.conf
