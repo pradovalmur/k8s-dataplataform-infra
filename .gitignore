@@ -1,2 +1,4 @@
 *.tfvars
-hcloud-k8s-infra/ansible/kubeconfig/admin.conf
+# Ansible kubeconfig (credenciais do cluster)
+ansible/kubeconfig/
+ansible/**/admin.conf
