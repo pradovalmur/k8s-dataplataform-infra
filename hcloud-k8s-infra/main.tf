@@ -20,7 +20,11 @@ module "k8s_fw" {
   name         = "k8s-lab-fw"
   network_cidr  = "10.0.0.0/16"
   admin_cidrs   = [var.ip_cidr]
-  allow_nodeport = false
+  allow_nodeport = true
+  lb_ipv4 = module.lb_traefik.ipv4
+
+  server_ids = module.hcloud_cluster.all_server_ids
+
 }
 
 module "lb_traefik" {

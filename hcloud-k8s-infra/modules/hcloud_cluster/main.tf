@@ -86,3 +86,4 @@ resource "hcloud_server_network" "worker_net" {
   network_id = hcloud_network.this.id
   ip         = cidrhost(var.subnet_cidr, 20 + count.index)
 }
+

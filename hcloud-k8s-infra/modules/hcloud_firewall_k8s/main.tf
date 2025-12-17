@@ -8,9 +8,8 @@ terraform {
   }
 }
 
-
 locals {
-  nodeport_cidrs = length(var.nodeport_source_cidrs) > 0 ? var.nodeport_source_cidrs : var.admin_cidrs
+  nodeport_cidrs = var.lb_ipv4 != null ? ["${var.lb_ipv4}/32"] : var.admin_cidrs
 }
 
 resource "hcloud_firewall" "this" {
@@ -45,7 +44,7 @@ resource "hcloud_firewall" "this" {
     direction  = "in"
     protocol   = "tcp"
     port       = "10250"
-    source_ips = [var.network_cidr]
+    source_ips = concat([var.network_cidr], var.admin_cidrs)
   }
 
   # kube-scheduler
@@ -90,4 +89,10 @@ resource "hcloud_firewall" "this" {
       source_ips = local.nodeport_cidrs
     }
   }
+}
+
+resource "hcloud_firewall_attachment" "this" {
+  for_each    = length(var.server_ids) > 0 ? { "all" = true } : {}
+  firewall_id = hcloud_firewall.this.id
+  server_ids  = var.server_ids
 }
