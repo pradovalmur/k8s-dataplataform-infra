@@ -13,18 +13,20 @@ provider "hcloud" {
   token = var.hcloud_token
 }
 
-
-module "k8s_fw" {
+module "firewall" {
   source = "./modules/hcloud_firewall_k8s"
 
-  name         = "k8s-lab-fw"
-  network_cidr  = "10.0.0.0/16"
-  admin_cidrs   = [var.ip_cidr]
-  allow_nodeport = true
-  lb_ipv4 = module.lb_traefik.ipv4
+  name         = var.firewall_name
+  network_cidr = var.network_cidr
+  admin_cidrs  = var.admin_cidrs
 
-  server_ids = module.hcloud_cluster.all_server_ids
+  rules = var.firewall_rules
 
+  allow_nodeport        = var.allow_nodeport
+  nodeport_source_cidrs = var.nodeport_source_cidrs
+  lb_ipv4               = var.lb_ipv4
+
+  server_ids = var.server_ids
 }
 
 module "lb_traefik" {
@@ -60,7 +62,7 @@ module "hcloud_cluster" {
   subnet_cidr         = "10.0.1.0/24"
   network_zone        = "eu-central"
 
-  firewall_ids        = [module.k8s_fw.id]
+  firewall_ids        = [module.firewall.id]
 
   labels = {
     environment = "lab"

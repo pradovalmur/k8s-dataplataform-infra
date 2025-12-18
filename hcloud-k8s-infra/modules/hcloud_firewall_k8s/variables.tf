@@ -13,14 +13,25 @@ variable "admin_cidrs" {
   type        = list(string)
 }
 
+variable "rules" {
+  description = "Lista de regras do firewall (substitui regras hardcoded do módulo)"
+  type = list(object({
+    direction  = string  # "in" | "out"
+    protocol   = string  # "tcp" | "udp" | "icmp" | "esp" | ...
+    port       = string  # ex: \"22\" ou \"2379-2380\" (string porque o provider aceita range)
+    source_ips = list(string)
+  }))
+  default = []
+}
+
 variable "allow_nodeport" {
-  description = "Se true, libera NodePort (30000-32767) a partir de admin_cidrs"
+  description = "Se true, adiciona regra NodePort (30000-32767) usando nodeport_source_cidrs/lb_ipv4/admin_cidrs"
   type        = bool
   default     = true
 }
 
 variable "nodeport_source_cidrs" {
-  description = "Opcional: CIDRs para NodePort. Se vazio e allow_nodeport=true, usa admin_cidrs."
+  description = "Opcional: CIDRs para NodePort. Se vazio e allow_nodeport=true, usa lb_ipv4/admin_cidrs."
   type        = list(string)
   default     = []
 }
