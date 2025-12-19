@@ -21,13 +21,14 @@ variable "admin_cidrs" {
   type = list(string)
 }
 
-variable "firewall_rules" {
+variable "firewall_rules_base" {
   description = "Regras do firewall (passadas para o módulo)"
   type = list(object({
     direction  = string
     protocol   = string
     port       = string
-    source_ips = list(string)
+    source_ips      = optional(list(string))
+    destination_ips = optional(list(string))
   }))
   default = []
 }

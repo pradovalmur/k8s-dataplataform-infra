@@ -19,7 +19,8 @@ variable "rules" {
     direction  = string  # "in" | "out"
     protocol   = string  # "tcp" | "udp" | "icmp" | "esp" | ...
     port       = string  # ex: \"22\" ou \"2379-2380\" (string porque o provider aceita range)
-    source_ips = list(string)
+    source_ips  = optional(list(string))
+    destination_ips  = optional(list(string))
   }))
   default = []
 }

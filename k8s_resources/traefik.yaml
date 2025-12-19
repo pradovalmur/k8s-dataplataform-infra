@@ -64,10 +64,11 @@ data:
 
     api:
       dashboard: true
+      insecure: false
 
     providers:
       kubernetesIngress:
-        ingressClass: {}
+        ingressClass: traefik
 
     log:
       level: INFO
@@ -110,37 +111,36 @@ spec:
             name: traefik-static
 
 ---
+# Service principal (exposição via Hetzner LoadBalancer)
 apiVersion: v1
 kind: Service
 metadata:
   name: traefik
   namespace: traefik
 spec:
-  type: NodePort
+  type: LoadBalancer
   selector:
     app: traefik
   ports:
     - name: web
       port: 80
       targetPort: 8000
-      nodePort: 30080
     - name: websecure
       port: 443
       targetPort: 8443
-      nodePort: 30443
 
 ---
+# Dashboard interno (sem exposição pública)
 apiVersion: v1
 kind: Service
 metadata:
   name: traefik-dashboard
   namespace: traefik
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: traefik
   ports:
     - name: dashboard
       port: 8080
       targetPort: 8080
-      nodePort: 30088

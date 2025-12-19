@@ -13,6 +13,28 @@ provider "hcloud" {
   token = var.hcloud_token
 }
 
+locals {
+  firewall_rules = concat(
+    var.firewall_rules_base,
+
+    # Traefik via LoadBalancer (somente do IP do LB)
+    [
+      {
+        direction  = "in"
+        protocol   = "tcp"
+        port       = "80"
+        source_ips = ["${module.lb_traefik.ipv4}/32"]
+      },
+      {
+        direction  = "in"
+        protocol   = "tcp"
+        port       = "443"
+        source_ips = ["${module.lb_traefik.ipv4}/32"]
+      }
+    ]
+  )
+}
+
 module "firewall" {
   source = "./modules/hcloud_firewall_k8s"
 
@@ -20,7 +42,7 @@ module "firewall" {
   network_cidr = var.network_cidr
   admin_cidrs  = var.admin_cidrs
 
-  rules = var.firewall_rules
+  rules = local.firewall_rules
 
   allow_nodeport        = var.allow_nodeport
   nodeport_source_cidrs = var.nodeport_source_cidrs

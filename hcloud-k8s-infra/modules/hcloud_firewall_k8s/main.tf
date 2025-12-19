@@ -28,12 +28,17 @@ resource "hcloud_firewall" "this" {
   name = var.name
 
   dynamic "rule" {
-    for_each = local.all_rules
+    for_each = var.rules
     content {
-      direction  = rule.value.direction
-      protocol   = rule.value.protocol
-      port       = rule.value.port
-      source_ips = rule.value.source_ips
+      direction = rule.value.direction
+      protocol  = rule.value.protocol
+
+      # só setar port quando não for ICMP
+      port = rule.value.protocol == "icmp" ? null : rule.value.port
+
+      # IN usa source_ips, OUT usa destination_ips
+      source_ips      = rule.value.direction == "in"  ? coalesce(rule.value.source_ips, []) : null
+      destination_ips = rule.value.direction == "out" ? coalesce(rule.value.destination_ips, []) : null
     }
   }
 }
