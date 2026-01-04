@@ -43,11 +43,6 @@ variable "nodeport_source_cidrs" {
   default = []
 }
 
-variable "lb_ipv4" {
-  type    = string
-  default = null
-}
-
 # se você já tem servers no root, normalmente você já tem algo assim
 variable "server_ids" {
   type    = list(string)

@@ -14,25 +14,7 @@ provider "hcloud" {
 }
 
 locals {
-  firewall_rules = concat(
-    var.firewall_rules_base,
-
-    # Traefik via LoadBalancer (somente do IP do LB)
-    [
-      {
-        direction  = "in"
-        protocol   = "tcp"
-        port       = "80"
-        source_ips = ["${module.lb_traefik.ipv4}/32"]
-      },
-      {
-        direction  = "in"
-        protocol   = "tcp"
-        port       = "443"
-        source_ips = ["${module.lb_traefik.ipv4}/32"]
-      }
-    ]
-  )
+  firewall_rules = var.firewall_rules_base
 }
 
 module "firewall" {
@@ -46,22 +28,8 @@ module "firewall" {
 
   allow_nodeport        = var.allow_nodeport
   nodeport_source_cidrs = var.nodeport_source_cidrs
-  lb_ipv4               = var.lb_ipv4
 
   server_ids = var.server_ids
-}
-
-module "lb_traefik" {
-  source   = "./modules/hcloud_lb"
-  name     = "k8s-lab-traefik"
-  location = "nbg1"
-
-  servers = module.hcloud_cluster.server_id_map
-
-  services = [
-    { name = "http",  protocol = "tcp", listen_port = 80,  destination_port = 30080 },
-    { name = "https", protocol = "tcp", listen_port = 443, destination_port = 30443 }
-  ]
 }
 
 resource "hcloud_ssh_key" "local_key" {
@@ -75,8 +43,8 @@ module "hcloud_cluster" {
   cluster_name        = "k8s-lab"
   location            = "nbg1"
   image               = "ubuntu-22.04"
-  master_server_type  = "cpx21"
-  worker_server_type  = "cpx21"
+  master_server_type  = "cx23"
+  worker_server_type  = "cx23"
   master_count        = 1
   worker_count        = 2
   ssh_key_ids         = [hcloud_ssh_key.local_key.id]
@@ -104,7 +72,7 @@ k8s-lab-worker-2 ansible_host=${module.hcloud_cluster.worker_public_ips[1]} priv
 
 [all:vars]
 ansible_user=root
-ansible_become=true
+ansible_become=false
 ansible_ssh_private_key_file=~/.ssh/id_ed25519
   EOT
 }

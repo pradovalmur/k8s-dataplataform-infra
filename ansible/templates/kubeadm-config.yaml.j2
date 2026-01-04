@@ -1,15 +1,34 @@
+# ansible/kubeadm-config.yaml.j2
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
 
-kubernetesVersion: {{ k8s_version_full }}
+kubernetesVersion: "v1.30.14"
+controlPlaneEndpoint: "{{ control_plane_endpoint }}"
 
-controlPlaneEndpoint: "{{ hostvars[inventory_hostname][apiserver_private_ip_var] }}:6443"
+networking:
+  podSubnet: "10.244.0.0/16"
 
 apiServer:
   certSANs:
-    - {{ hostvars[inventory_hostname][apiserver_private_ip_var] }}
-    - {{ hostvars[inventory_hostname][apiserver_public_ip_var] }}
-    - 127.0.0.1
+{% for san in apiserver_sans %}
+    - "{{ san }}"
+{% endfor %}
+  extraArgs:
+    cloud-provider: external
 
-networking:
-  podSubnet: {{ pod_network_cidr }}
+controllerManager:
+  extraArgs:
+    cloud-provider: external
+
+scheduler: {}
+
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+
+nodeRegistration:
+  criSocket: "unix:///run/containerd/containerd.sock"
+  name: "{{ inventory_hostname }}"
+  kubeletExtraArgs:
+    cloud-provider: external
+    node-ip: "{{ hostvars[inventory_hostname].private_ip }}"

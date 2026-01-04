@@ -1,3 +1,4 @@
+# ansible/site.yaml
 ---
 ############################
 # COMMON – ALL NODES
@@ -5,6 +6,8 @@
 - name: Common setup on all nodes
   hosts: all
   become: true
+  vars:
+    k8s_version_minor: "v1.30"
   tasks:
     - name: Disable swap (runtime)
       command: swapoff -a
@@ -63,6 +66,7 @@
 
     - name: Generate default containerd config if missing
       shell: |
+        set -euo pipefail
         mkdir -p /etc/containerd
         test -f /etc/containerd/config.toml || (containerd config default | tee /etc/containerd/config.toml >/dev/null)
       args:
@@ -74,18 +78,6 @@
         regexp: 'SystemdCgroup = false'
         replace: 'SystemdCgroup = true'
 
-    - name: Configure containerd CNI conf dir
-      replace:
-        path: /etc/containerd/config.toml
-        regexp: 'cni_conf_dir = ""'
-        replace: 'cni_conf_dir = "/etc/cni/net.d"'
-
-    - name: Configure containerd CNI bin dir
-      replace:
-        path: /etc/containerd/config.toml
-        regexp: 'cni_bin_dir = ""'
-        replace: 'cni_bin_dir = "/opt/cni/bin"'
-
     - name: Restart containerd
       systemd:
         name: containerd
@@ -93,7 +85,7 @@
         enabled: true
 
     ############################
-    # Kubernetes repo (NO HANG)
+    # Kubernetes repo
     ############################
     - name: Ensure keyrings dir exists
       file:
@@ -101,46 +93,62 @@
         state: directory
         mode: "0755"
 
-    - name: Download Kubernetes Release key
-      command: >
-        curl -fsSL --connect-timeout 10 --max-time 30
-        https://pkgs.k8s.io/core:/stable:/{{ k8s_version_minor }}/deb/Release.key
-        -o /etc/apt/keyrings/kubernetes-apt-keyring.key
+    - name: Install Kubernetes apt keyring (simple, ipv4, timeouts)
+      shell: |
+        set -euo pipefail
+        curl -4 -fsSL -A "Mozilla/5.0" \
+          --connect-timeout 5 --max-time 20 \
+          --retry 6 --retry-delay 2 --retry-connrefused \
+          "https://pkgs.k8s.io/core:/stable:/{{ k8s_version_minor }}/deb/Release.key" \
+          | gpg --dearmor --batch --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
       args:
-        creates: /etc/apt/keyrings/kubernetes-apt-keyring.key
+        executable: /bin/bash
+      changed_when: true
 
-    - name: Dearmor Kubernetes key
-      command: >
-        gpg --batch --yes --dearmor
-        -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-        /etc/apt/keyrings/kubernetes-apt-keyring.key
-      args:
-        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-
-    - name: Add Kubernetes apt repo
+    - name: Add Kubernetes apt repo (pkgs.k8s.io)
       copy:
         dest: /etc/apt/sources.list.d/kubernetes.list
+        mode: "0644"
         content: |
           deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ k8s_version_minor }}/deb/ /
 
-    - name: Install kubelet, kubeadm, kubectl
+    - name: Apt update (fail fast if repo blocked)
       apt:
         update_cache: true
+
+    - name: Install kubelet, kubeadm, kubectl
+      apt:
         name:
           - kubelet
           - kubeadm
           - kubectl
         state: present
+        update_cache: false
 
-    - name: Hold Kubernetes packages
-      command: apt-mark hold kubelet kubeadm kubectl
-      changed_when: false
+    ############################
+    # node-ip + external cloud provider (FORÇA 10.x)
+    ############################
+    - name: Fail if private_ip not defined in inventory
+      fail:
+        msg: "private_ip não definido no inventory para {{ inventory_hostname }}"
+      when: hostvars[inventory_hostname].private_ip is not defined or hostvars[inventory_hostname].private_ip | length == 0
 
-    - name: Enable kubelet
+    - name: Configure kubelet default args (node-ip private + external cloud provider)
+      copy:
+        dest: /etc/default/kubelet
+        mode: "0644"
+        content: |
+          KUBELET_EXTRA_ARGS=--node-ip={{ hostvars[inventory_hostname].private_ip }} --cloud-provider=external
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: true
+
+    - name: Restart kubelet
       systemd:
         name: kubelet
+        state: restarted
         enabled: true
-        state: started
 
 
 ############################
@@ -149,16 +157,46 @@
 - name: Init control-plane
   hosts: master
   become: true
+
+  pre_tasks:
+    - name: Resolve HCLOUD_TOKEN from controller env (optional)
+      set_fact:
+        hcloud_token_resolved: "{{ lookup('env','HCLOUD_TOKEN') | default('') }}"
+      delegate_to: localhost
+      run_once: true
+
   tasks:
     - name: Check if cluster already initialized
       stat:
         path: /etc/kubernetes/admin.conf
       register: adminconf
 
+    - name: Fail if private_ip not defined for master
+      fail:
+        msg: "private_ip não definido no inventory para {{ inventory_hostname }}"
+      when:
+        - not adminconf.stat.exists
+        - hostvars[inventory_hostname].private_ip is not defined or hostvars[inventory_hostname].private_ip | length == 0
+
+    - name: Get master public IPv4 (hetzner metadata)
+      shell: curl -fsS http://169.254.169.254/hetzner/v1/metadata/public-ipv4
+      args:
+        executable: /bin/bash
+      register: master_public_ip
+      changed_when: false
+      when: not adminconf.stat.exists
+
     - name: Render kubeadm config
       template:
-        src: templates/kubeadm-config.yaml.j2
+        src: kubeadm-config.yaml.j2
         dest: /root/kubeadm-config.yaml
+        mode: "0600"
+      vars:
+        control_plane_endpoint: "{{ hostvars[inventory_hostname].private_ip }}:6443"
+        apiserver_sans:
+          - "{{ hostvars[inventory_hostname].private_ip }}"
+          - "{{ master_public_ip.stdout }}"
+          - "127.0.0.1"
       when: not adminconf.stat.exists
 
     - name: kubeadm init
@@ -167,16 +205,103 @@
 
     - name: Setup kubeconfig for root
       shell: |
+        set -euo pipefail
         mkdir -p /root/.kube
         cp /etc/kubernetes/admin.conf /root/.kube/config
       args:
         executable: /bin/bash
 
+    ############################
+    # CNI (Flannel) + patch iface 10.x
+    ############################
     - name: Install Flannel CNI
       command: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
+    - name: Detect private interface name (10.x) on master
+      shell: |
+        set -euo pipefail
+        ip -o -4 addr show scope global | awk '$4 ~ /^10\./ {print $2; exit}'
+      args:
+        executable: /bin/bash
+      register: flannel_iface
+      changed_when: false
+
+    - name: Fail if flannel iface not found
+      fail:
+        msg: "Não achei interface com IP 10.x no master (necessário para Flannel)."
+      when: flannel_iface.stdout | length == 0
+
+    - name: Patch Flannel DaemonSet to use private interface (idempotent)
+      shell: |
+        set -euo pipefail
+        if kubectl -n kube-flannel get ds kube-flannel-ds -o json | grep -q -- "--iface="; then
+          exit 0
+        fi
+        kubectl -n kube-flannel patch ds kube-flannel-ds --type='json' -p='[
+          {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--iface={{ flannel_iface.stdout }}"}
+        ]'
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      args:
+        executable: /bin/bash
+      changed_when: true
+      failed_when: false
+
+    - name: Restart Flannel DaemonSet
+      shell: |
+        set -euo pipefail
+        kubectl -n kube-flannel rollout restart ds kube-flannel-ds
+        kubectl -n kube-flannel rollout status ds kube-flannel-ds --timeout=240s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
+    ############################
+    # Hetzner CCM (required for LB via Service type=LoadBalancer)
+    ############################
+    - name: Fail if HCLOUD_TOKEN not set on controller (required for CCM)
+      fail:
+        msg: "HCLOUD_TOKEN não está definido no ambiente do teu Mac (controller). Ex: export HCLOUD_TOKEN=..."
+      delegate_to: localhost
+      run_once: true
+      when: hcloud_token_resolved | length == 0
+
+    - name: Fail if hcloud_network_id not set (required for CCM)
+      fail:
+        msg: "hcloud_network_id não definido (group_vars)."
+      when: hcloud_network_id is not defined or hcloud_network_id | length == 0
+
+    - name: Ensure hcloud secret exists/updated (token + network)
+      shell: |
+        set -euo pipefail
+        kubectl -n kube-system create secret generic hcloud \
+          --from-literal=token={{ hcloud_token_resolved }} \
+          --from-literal=network={{ hcloud_network_id }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      args:
+        executable: /bin/bash
+
+    - name: Apply Hetzner CCM (networks)
+      command: kubectl apply -f https://raw.githubusercontent.com/hetznercloud/hcloud-cloud-controller-manager/master/deploy/ccm-networks.yaml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for CCM rollout
+      command: kubectl -n kube-system rollout status deploy/hcloud-cloud-controller-manager --timeout=240s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      changed_when: false
+
+    ############################
+    # Join command
+    ############################
     - name: Get join command
       command: kubeadm token create --print-join-command
       register: join_cmd
@@ -199,8 +324,21 @@
         path: /etc/kubernetes/kubelet.conf
       register: kubeletconf
 
+    - name: Restart kubelet (ensure args applied)
+      systemd:
+        name: kubelet
+        state: restarted
+      when: not kubeletconf.stat.exists
+
+    - name: Get join command from master (run once)
+      command: kubeadm token create --print-join-command
+      delegate_to: "{{ groups['master'][0] }}"
+      run_once: true
+      register: join_cmd
+      changed_when: false
+
     - name: Join cluster
-      command: "{{ hostvars[groups['master'][0]].kubeadm_join_command }}"
+      command: "{{ join_cmd.stdout }}"
       when: not kubeletconf.stat.exists
 
 
@@ -209,13 +347,14 @@
 ############################
 - name: Fetch kubeconfig to local machine
   hosts: master
-  become: true
+  become: false
   tasks:
     - name: Fetch admin.conf
       fetch:
         src: /etc/kubernetes/admin.conf
         dest: "{{ playbook_dir }}/kubeconfig/admin.conf"
         flat: true
+
 - name: Install kubeconfig locally
   hosts: localhost
   connection: local
@@ -237,11 +376,12 @@
     - name: Export KUBECONFIG in shell profile
       lineinfile:
         path: "{{ lookup('env','HOME') }}/.zshrc"
+        regexp: '^export KUBECONFIG=\$HOME/\.kube/k8s-lab\.conf$'
         line: 'export KUBECONFIG=$HOME/.kube/k8s-lab.conf'
         create: yes
 
-    - name: Point kubeconfig to master public IP
-      command: >
-        kubectl config set-cluster kubernetes
-        --server=https://{{ hostvars[groups['master'][0]].ansible_host }}:6443
-        --kubeconfig {{ lookup('env','HOME') }}/.kube/k8s-lab.conf
+    - name: Point kubeconfig to master public IP (edit file)
+      replace:
+        path: "{{ lookup('env','HOME') }}/.kube/k8s-lab.conf"
+        regexp: 'server: https://.*:6443'
+        replace: "server: https://{{ hostvars[groups['master'][0]].ansible_host }}:6443"

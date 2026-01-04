@@ -6,3 +6,7 @@ pod_network_cidr: "10.244.0.0/16"
 # SANs: private_ip vem do inventory, ansible_host é o público
 apiserver_private_ip_var: "private_ip"
 apiserver_public_ip_var: "ansible_host"
+
+hcloud_token: "{{ lookup('env','HCLOUD_TOKEN', default='') }}"
+hcloud_network_id: "11802786"
+
