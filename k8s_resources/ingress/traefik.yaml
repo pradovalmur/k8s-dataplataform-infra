@@ -89,19 +89,23 @@ spec:
           image: traefik:v3.1
           args:
             - --api.dashboard=true
-            - --api.insecure=false
+            - --api.insecure=true
             - --entrypoints.web.address=:80
             - --entrypoints.websecure.address=:443
             - --providers.kubernetesingress=true
-            - --providers.kubernetesingress.ingressclass=traefik
-            - --log.level=INFO
+            - --providers.kubernetesingress.ingressClass=traefik
+            - --log.level=DEBUG
             - --ping=true
             - --ping.entrypoint=web
+            - --entrypoints.web.http.redirections.entrypoint.to=websecure
+            - --entrypoints.web.http.redirections.entrypoint.scheme=https
           ports:
             - name: web
               containerPort: 80
             - name: websecure
               containerPort: 443
+            - name: admin
+              containerPort: 8080
           readinessProbe:
             httpGet:
               path: /ping
