@@ -9,9 +9,7 @@ terraform {
   required_version = ">= 1.5.0"
 }
 
-provider "hcloud" {
-  token = var.hcloud_token
-}
+provider "hcloud" {}
 
 locals {
   firewall_rules = var.firewall_rules_base

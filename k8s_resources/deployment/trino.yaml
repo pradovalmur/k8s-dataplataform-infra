@@ -1,0 +1,416 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: analytics
+---
+# -------------------------
+# Secrets
+# -------------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: iceberg-postgres
+  namespace: analytics
+type: Opaque
+stringData:
+  POSTGRES_DB: iceberg
+  POSTGRES_USER: iceberg
+  POSTGRES_PASSWORD: "Analytics_plataform"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: trino-s3
+  namespace: analytics
+type: Opaque
+stringData:
+  # use as credenciais do MinIO (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD)
+  S3_ACCESS_KEY: "minioadmin"
+  S3_SECRET_KEY: "minioadmin123"
+---
+# -------------------------
+# Postgres (Iceberg JDBC catalog)
+# -------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: iceberg-catalog
+  namespace: analytics
+spec:
+  selector:
+    app: iceberg-catalog
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: iceberg-catalog
+  namespace: analytics
+spec:
+  serviceName: iceberg-catalog
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iceberg-catalog
+  template:
+    metadata:
+      labels:
+        app: iceberg-catalog
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: "OnRootMismatch"
+      containers:
+        - name: postgres
+          image: postgres:15
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_DB
+              valueFrom: { secretKeyRef: { name: iceberg-postgres, key: POSTGRES_DB } }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: iceberg-postgres, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: iceberg-postgres, key: POSTGRES_PASSWORD } }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: hcloud-volumes
+        resources:
+          requests:
+            storage: 10Gi
+---
+# -------------------------
+# Trino ConfigMaps
+# -------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-common
+  namespace: analytics
+data:
+  jvm.config: |
+    -server
+    -Xmx1G
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=32M
+    -XX:+UseGCOverheadLimit
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:+ExitOnOutOfMemoryError
+  log.properties: |
+    io.trino=INFO
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-coordinator-config
+  namespace: analytics
+data:
+  config.properties: |
+    coordinator=true
+    node-scheduler.include-coordinator=false
+    http-server.http.port=8080
+    http-server.process-forwarded=true
+    discovery.uri=http://trino-coordinator:8080
+
+    query.max-memory=1GB
+    query.max-memory-per-node=512MB
+    memory.heap-headroom-per-node=256MB
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-worker-config
+  namespace: analytics
+data:
+  config.properties: |
+    coordinator=false
+    http-server.http.port=8080
+    discovery.uri=http://trino-coordinator:8080
+
+    query.max-memory=1GB
+    query.max-memory-per-node=512MB
+    memory.heap-headroom-per-node=256MB
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-catalog
+  namespace: analytics
+data:
+  iceberg.properties: |
+    connector.name=iceberg
+
+    iceberg.catalog.type=jdbc
+    iceberg.jdbc-catalog.driver-class=org.postgresql.Driver
+    iceberg.jdbc-catalog.connection-url=jdbc:postgresql://iceberg-catalog:5432/iceberg
+    iceberg.jdbc-catalog.connection-user=iceberg
+    iceberg.jdbc-catalog.connection-password=${ENV:ICEBERG_DB_PASSWORD}
+
+    # obrigatório (erro que você viu)
+    iceberg.jdbc-catalog.catalog-name=iceberg
+
+    # Warehouse no MinIO (bucket analytics)
+    iceberg.jdbc-catalog.default-warehouse-dir=s3://analytics/iceberg/warehouse
+
+    # S3/MinIO
+    fs.native-s3.enabled=true
+    s3.endpoint=http://minio.minio.svc.cluster.local:9000
+    s3.region=us-east-1
+    s3.path-style-access=true
+    s3.aws-access-key=${ENV:S3_ACCESS_KEY}
+    s3.aws-secret-key=${ENV:S3_SECRET_KEY}
+---
+# -------------------------
+# Trino Coordinator Service (cluster interno)
+# -------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-coordinator
+  namespace: analytics
+spec:
+  selector:
+    app: trino-coordinator
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+# -------------------------
+# Trino Coordinator Deployment
+# -------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-coordinator
+  namespace: analytics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trino-coordinator
+  template:
+    metadata:
+      labels:
+        app: trino-coordinator
+    spec:
+      initContainers:
+        - name: render-config
+          image: busybox:1.36
+          command: ["sh","-c"]
+          args:
+            - |
+              set -e
+              mkdir -p /etc/trino/catalog
+              cp /cm-common/jvm.config /etc/trino/jvm.config
+              cp /cm-common/log.properties /etc/trino/log.properties
+              cp /cm-role/config.properties /etc/trino/config.properties
+              cp /cm-catalog/iceberg.properties /etc/trino/catalog/iceberg.properties
+              echo "node.environment=analytics" > /etc/trino/node.properties
+              echo "node.id=$(cat /proc/sys/kernel/random/uuid)" >> /etc/trino/node.properties
+          volumeMounts:
+            - name: trino-etc
+              mountPath: /etc/trino
+            - name: cm-common
+              mountPath: /cm-common
+            - name: cm-role
+              mountPath: /cm-role
+            - name: cm-catalog
+              mountPath: /cm-catalog
+      containers:
+        - name: trino
+          image: trinodb/trino:479
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ICEBERG_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: iceberg-postgres, key: POSTGRES_PASSWORD } }
+            - name: S3_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: trino-s3, key: S3_ACCESS_KEY } }
+            - name: S3_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: trino-s3, key: S3_SECRET_KEY } }
+          readinessProbe:
+            httpGet: { path: /v1/info, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: { path: /v1/info, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests: { cpu: "250m", memory: "1Gi" }
+            limits:   { cpu: "1",    memory: "2Gi" }
+          volumeMounts:
+            - name: trino-etc
+              mountPath: /etc/trino
+            - name: trino-data
+              mountPath: /data/trino
+      volumes:
+        - name: trino-etc
+          emptyDir: {}
+        - name: trino-data
+          emptyDir: {}
+        - name: cm-common
+          configMap: { name: trino-common }
+        - name: cm-role
+          configMap: { name: trino-coordinator-config }
+        - name: cm-catalog
+          configMap: { name: trino-catalog }
+---
+# -------------------------
+# Trino Workers
+# -------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino-worker
+  namespace: analytics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trino-worker
+  template:
+    metadata:
+      labels:
+        app: trino-worker
+    spec:
+      initContainers:
+        - name: render-config
+          image: busybox:1.36
+          command: ["sh","-c"]
+          args:
+            - |
+              set -e
+              mkdir -p /etc/trino/catalog
+              cp /cm-common/jvm.config /etc/trino/jvm.config
+              cp /cm-common/log.properties /etc/trino/log.properties
+              cp /cm-role/config.properties /etc/trino/config.properties
+              cp /cm-catalog/iceberg.properties /etc/trino/catalog/iceberg.properties
+              echo "node.environment=analytics" > /etc/trino/node.properties
+              echo "node.id=$(cat /proc/sys/kernel/random/uuid)" >> /etc/trino/node.properties
+          volumeMounts:
+            - name: trino-etc
+              mountPath: /etc/trino
+            - name: cm-common
+              mountPath: /cm-common
+            - name: cm-role
+              mountPath: /cm-role
+            - name: cm-catalog
+              mountPath: /cm-catalog
+      containers:
+        - name: trino
+          image: trinodb/trino:479
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ICEBERG_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: iceberg-postgres, key: POSTGRES_PASSWORD } }
+            - name: S3_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: trino-s3, key: S3_ACCESS_KEY } }
+            - name: S3_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: trino-s3, key: S3_SECRET_KEY } }
+          readinessProbe:
+            httpGet: { path: /v1/info, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: { path: /v1/info, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests: { cpu: "250m", memory: "1Gi" }
+            limits:   { cpu: "1",    memory: "2Gi" }
+          volumeMounts:
+            - name: trino-etc
+              mountPath: /etc/trino
+            - name: trino-data
+              mountPath: /data/trino
+      volumes:
+        - name: trino-etc
+          emptyDir: {}
+        - name: trino-data
+          emptyDir: {}
+        - name: cm-common
+          configMap: { name: trino-common }
+        - name: cm-role
+          configMap: { name: trino-worker-config }
+        - name: cm-catalog
+          configMap: { name: trino-catalog }
+---
+# -------------------------
+# Trino Service (para Ingress)
+# -------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino
+  namespace: analytics
+  labels:
+    app: trino-coordinator
+spec:
+  type: ClusterIP
+  selector:
+    app: trino-coordinator
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+# -------------------------
+# Trino Ingress (Traefik)
+# -------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: trino
+  namespace: analytics
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - trino.chameleonmountain.com
+      secretName: wildcard-tls
+  rules:
+    - host: trino.chameleonmountain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: trino
+                port:
+                  number: 8080

@@ -13,10 +13,7 @@ crash.log
 crash.*.log
 
 # variables (usually secrets)
-**/*.tfvars
-**/*.tfvars.json
-!**/*.tfvars.example
-!**/*.tfvars.json.example
+
 
 # plan files
 **/*.tfplan

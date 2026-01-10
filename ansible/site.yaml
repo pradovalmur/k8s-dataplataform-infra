@@ -158,6 +158,12 @@
   hosts: master
   become: true
 
+  vars:
+    # Versões recentes do CSI usam manifests versionados (ex: v2.11.0+).
+    # Mantém fácil pinagem e upgrades controlados.
+    hcloud_csi_version: "v2.11.0"
+    hcloud_csi_manifest_url: "https://raw.githubusercontent.com/hetznercloud/csi-driver/{{ hcloud_csi_version }}/deploy/kubernetes/hcloud-csi.yml"
+
   pre_tasks:
     - name: Resolve HCLOUD_TOKEN from controller env (optional)
       set_fact:
@@ -298,6 +304,52 @@
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       changed_when: false
+
+    ############################
+    # Hetzner CSI (Volumes + StorageClass)
+    ############################
+    - name: Apply Hetzner CSI Driver
+      command: kubectl apply -f {{ hcloud_csi_manifest_url }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for CSI controller rollout (StatefulSet)
+      shell: |
+        set -euo pipefail
+        kubectl -n kube-system rollout status statefulset/hcloud-csi-controller --timeout=240s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
+    - name: Wait for CSI node rollout (DaemonSet)
+      shell: |
+        set -euo pipefail
+        kubectl -n kube-system rollout status daemonset/hcloud-csi-node --timeout=240s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure Hetzner StorageClass is default (hcloud-volumes)
+      shell: |
+        set -euo pipefail
+        # remove default from any current default storageclass (best-effort)
+        for sc in $(kubectl get sc -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{"\n"}{end}'); do
+          kubectl annotate sc "$sc" storageclass.kubernetes.io/is-default-class="false" --overwrite || true
+        done
+        # set hetzner as default (the manifest creates hcloud-volumes)
+        kubectl annotate sc hcloud-volumes storageclass.kubernetes.io/is-default-class="true" --overwrite
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
 
     ############################
     # Join command

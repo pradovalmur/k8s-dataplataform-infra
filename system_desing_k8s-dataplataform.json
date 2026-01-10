@@ -1,0 +1,1095 @@
+{
+  "nodes": [
+    {
+      "id": "control-plane-1",
+      "type": "architecture",
+      "position": {
+        "x": -2969.790003612487,
+        "y": -354.25439683184004
+      },
+      "data": {
+        "label": "Control Plane",
+        "componentId": "control-plane",
+        "properties": {}
+      },
+      "measured": {
+        "width": 193,
+        "height": 88
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "worker-nodes-2",
+      "type": "architecture",
+      "position": {
+        "x": -3094.1258298178523,
+        "y": -138.6034289770943
+      },
+      "data": {
+        "label": "Worker Nodes",
+        "componentId": "worker-nodes",
+        "properties": {
+          "nodeCount": 2,
+          "cpuPerNode": 4,
+          "memoryPerNode": 8,
+          "instanceType": "general",
+          "virtualNodes": {
+            "node-1": {
+              "id": "node-1",
+              "cpuTotal": 4000,
+              "memoryTotal": 8192,
+              "cpuUsed": 200,
+              "memoryUsed": 256,
+              "podIds": [
+                "managed_pod_statefulset-14_0",
+                "managed_pod_statefulset-20_0"
+              ]
+            },
+            "node-2": {
+              "id": "node-2",
+              "cpuTotal": 4000,
+              "memoryTotal": 8192,
+              "cpuUsed": 100,
+              "memoryUsed": 128,
+              "podIds": [
+                "managed_pod_deployment-10_0"
+              ]
+            }
+          },
+          "cpuUsed": 300,
+          "memoryUsed": 384,
+          "scheduledPods": 3,
+          "scheduledPodIds": "managed_pod_statefulset-14_0,managed_pod_statefulset-20_0,managed_pod_deployment-10_0",
+          "cpuSimulated": 180,
+          "memorySimulated": 138,
+          "conntrack": 0
+        }
+      },
+      "measured": {
+        "width": 240,
+        "height": 350
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "load-balancer-5",
+      "type": "architecture",
+      "position": {
+        "x": -159.07064911315848,
+        "y": 279.24042638670596
+      },
+      "data": {
+        "label": "Load Balancer",
+        "componentId": "load-balancer",
+        "properties": {}
+      },
+      "measured": {
+        "width": 180,
+        "height": 64
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "users-6",
+      "type": "architecture",
+      "position": {
+        "x": -163.48350603055474,
+        "y": -31.743389181835028
+      },
+      "data": {
+        "label": "Users/Clients",
+        "componentId": "users",
+        "properties": {
+          "trafficPattern": "constant",
+          "requestsPerSecond": 50,
+          "peakRps": 500,
+          "duration": 60
+        },
+        "metrics": {
+          "label": "Current Load",
+          "value": "50 RPS",
+          "trend": "stable"
+        }
+      },
+      "measured": {
+        "width": 215,
+        "height": 171
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "prometheus-7",
+      "type": "architecture",
+      "position": {
+        "x": -3459.789144665244,
+        "y": 38.454231718180495
+      },
+      "data": {
+        "label": "Prometheus",
+        "componentId": "prometheus",
+        "properties": {
+          "scrapeInterval": "15s",
+          "retentionPeriod": "15d"
+        }
+      },
+      "measured": {
+        "width": 206,
+        "height": 115
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "loki-8",
+      "type": "architecture",
+      "position": {
+        "x": -3450.9880184212025,
+        "y": 270.4481323647052
+      },
+      "data": {
+        "label": "Loki",
+        "componentId": "loki",
+        "properties": {}
+      },
+      "measured": {
+        "width": 165,
+        "height": 64
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "grafana-9",
+      "type": "architecture",
+      "position": {
+        "x": -3458.900059015522,
+        "y": -202.27496477690318
+      },
+      "data": {
+        "label": "Grafana",
+        "componentId": "grafana",
+        "properties": {}
+      },
+      "measured": {
+        "width": 165,
+        "height": 88
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "deployment-10",
+      "type": "architecture",
+      "position": {
+        "x": -2683.7683957379586,
+        "y": 92.79968528882819
+      },
+      "data": {
+        "label": "Deployment",
+        "componentId": "deployment",
+        "properties": {
+          "replicas": 1,
+          "strategy": "RollingUpdate",
+          "imagePullPolicy": "IfNotPresent",
+          "secretName": "",
+          "configMapName": "",
+          "name": "rancher",
+          "namespace": "cattle-system",
+          "image": "rancher/rancher:v2.9.2",
+          "cpuRequest": "100m",
+          "cpuLimit": "500m",
+          "memoryRequest": "128Mi",
+          "memoryLimit": "256Mi",
+          "envVars": ""
+        }
+      },
+      "measured": {
+        "width": 242,
+        "height": 233
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "managed_rs_deployment-10",
+      "type": "architecture",
+      "position": {
+        "x": -2297.1317855310203,
+        "y": 88.89028514648066
+      },
+      "data": {
+        "componentId": "replicaset",
+        "label": "ReplicaSet",
+        "status": "healthy",
+        "isInitial": false,
+        "isNeeded": true,
+        "properties": {
+          "replicas": 1
+        },
+        "managedBy": "deployment-10"
+      },
+      "measured": {
+        "width": 187,
+        "height": 120
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "managed_pod_deployment-10_0",
+      "type": "architecture",
+      "position": {
+        "x": -1937.0927365110892,
+        "y": 92.05029671016001
+      },
+      "data": {
+        "componentId": "pod",
+        "label": "Pod 1",
+        "status": "healthy",
+        "labelStatus": "Running (18%)",
+        "isInitial": false,
+        "isNeeded": false,
+        "properties": {
+          "cpuRequest": "100m",
+          "memoryRequest": "128Mi",
+          "cpuLimit": "500m",
+          "memoryLimit": "256Mi",
+          "image": "rancher/rancher:v2.9.2",
+          "name": "rancher-1",
+          "secretName": "",
+          "configMapName": "",
+          "restartCount": 5,
+          "lastCrash": 1767970369303
+        },
+        "managedBy": "deployment-10",
+        "scheduledTo": "worker-nodes-2",
+        "virtualNode": "node-2",
+        "isReady": true,
+        "logs": [
+          "[18:23:02] [INFO] Pulling image \"rancher/rancher:v2.9.2\"",
+          "[18:23:03] [INFO] Successfully pulled image",
+          "[18:23:03] [INFO] Created container application",
+          "[18:23:03] [INFO] Started container application",
+          "[18:23:05] [INFO] Readiness probe succeeded. Pod is READY.",
+          "[14:50:46] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:50:46] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:50:49] [SYSTEM] Back-off restarting failed container",
+          "[14:50:55] [SYSTEM] Restarting container",
+          "[14:50:55] [INFO] Started container application",
+          "[14:50:56] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:50:56] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:50:59] [SYSTEM] Back-off restarting failed container",
+          "[14:51:05] [SYSTEM] Restarting container",
+          "[14:51:05] [INFO] Started container application",
+          "[14:51:48] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:51:48] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:51:51] [SYSTEM] Back-off restarting failed container",
+          "[14:51:57] [SYSTEM] Restarting container",
+          "[14:51:57] [INFO] Started container application",
+          "[14:51:58] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:51:58] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:52:01] [SYSTEM] Back-off restarting failed container",
+          "[14:52:07] [SYSTEM] Restarting container",
+          "[14:52:07] [INFO] Started container application",
+          "[14:52:49] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:52:49] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:52:52] [SYSTEM] Back-off restarting failed container",
+          "[14:52:57] [SYSTEM] Restarting container",
+          "[14:52:57] [INFO] Started container application"
+        ]
+      },
+      "measured": {
+        "width": 291,
+        "height": 263
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "service-12",
+      "type": "architecture",
+      "position": {
+        "x": -1466.201967958869,
+        "y": 74.5796157586596
+      },
+      "data": {
+        "label": "Service (ClusterIP)",
+        "componentId": "service",
+        "properties": {
+          "type": "ClusterIP",
+          "port": 80,
+          "targetPort": 8080,
+          "name": "rancher",
+          "namespace": "catte-system",
+          "loadBalancerIP": ""
+        }
+      },
+      "measured": {
+        "width": 252,
+        "height": 190
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "ingress-13",
+      "type": "architecture",
+      "position": {
+        "x": -977.1975391226872,
+        "y": 76.64187440900466
+      },
+      "data": {
+        "label": "Ingress",
+        "componentId": "ingress",
+        "properties": {
+          "name": "traefik",
+          "host": "rancher.chameleonmountain.com",
+          "path": "/",
+          "pathType": "Prefix",
+          "ingressClassName": "traefik",
+          "tlsEnabled": true
+        }
+      },
+      "measured": {
+        "width": 241,
+        "height": 209
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "statefulset-14",
+      "type": "architecture",
+      "position": {
+        "x": -2688.549849933941,
+        "y": 448.9420570328816
+      },
+      "data": {
+        "label": "StatefulSet",
+        "componentId": "statefulset",
+        "properties": {
+          "name": "minio",
+          "replicas": 1,
+          "serviceName": "minio-headless",
+          "podManagementPolicy": "OrderedReady",
+          "volumeClaimSize": "20Gi",
+          "secretName": "minio-root",
+          "configMapName": ""
+        }
+      },
+      "measured": {
+        "width": 396,
+        "height": 233
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "managed_pod_statefulset-14_0",
+      "type": "architecture",
+      "position": {
+        "x": -1939.9259977597385,
+        "y": 487.45234043561254
+      },
+      "data": {
+        "componentId": "pod",
+        "label": "my-statefulset-0",
+        "status": "healthy",
+        "labelStatus": "Running (18%)",
+        "isInitial": false,
+        "properties": {
+          "cpuLimit": "500m",
+          "memoryLimit": "256Mi",
+          "secretName": "",
+          "configMapName": "",
+          "restartCount": 5,
+          "lastCrash": 1767970369303
+        },
+        "managedBy": "statefulset-14",
+        "scheduledTo": "worker-nodes-2",
+        "virtualNode": "node-1",
+        "isReady": true,
+        "logs": [
+          "[16:54:28] [INFO] Pulling image \"nginx:latest\"",
+          "[16:54:29] [INFO] Successfully pulled image",
+          "[16:54:29] [INFO] Created container application",
+          "[16:54:29] [INFO] Started container application",
+          "[16:54:31] [INFO] Readiness probe succeeded. Pod is READY.",
+          "[14:50:46] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:50:46] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:50:49] [SYSTEM] Back-off restarting failed container",
+          "[14:50:56] [SYSTEM] Restarting container",
+          "[14:50:56] [INFO] Started container application",
+          "[14:50:57] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:50:57] [SYSTEM] Process OOMKilled by kernel. Usage: 1013Mi / Limit: 256Mi",
+          "[14:51:00] [SYSTEM] Back-off restarting failed container",
+          "[14:51:07] [SYSTEM] Restarting container",
+          "[14:51:07] [INFO] Started container application",
+          "[14:51:48] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:51:48] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:51:51] [SYSTEM] Back-off restarting failed container",
+          "[14:51:58] [SYSTEM] Restarting container",
+          "[14:51:58] [INFO] Started container application",
+          "[14:51:59] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:51:59] [SYSTEM] Process OOMKilled by kernel. Usage: 1013Mi / Limit: 256Mi",
+          "[14:52:02] [SYSTEM] Back-off restarting failed container",
+          "[14:52:09] [SYSTEM] Restarting container",
+          "[14:52:09] [INFO] Started container application",
+          "[14:52:49] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:52:49] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:52:52] [SYSTEM] Back-off restarting failed container",
+          "[14:52:58] [SYSTEM] Restarting container",
+          "[14:52:58] [INFO] Started container application"
+        ]
+      },
+      "measured": {
+        "width": 291,
+        "height": 225
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "headless-service-16",
+      "type": "architecture",
+      "position": {
+        "x": -1456.6864657748306,
+        "y": 525.246863000943
+      },
+      "data": {
+        "label": "Headless Service",
+        "componentId": "headless-service",
+        "properties": {}
+      },
+      "measured": {
+        "width": 201,
+        "height": 64
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "ingress-18",
+      "type": "architecture",
+      "position": {
+        "x": -1046.3490383562632,
+        "y": 642.0559228251556
+      },
+      "data": {
+        "label": "Ingress",
+        "componentId": "ingress",
+        "properties": {
+          "name": "minio-console",
+          "host": "minio-console.chameleonmountain.com",
+          "path": "/",
+          "pathType": "Prefix",
+          "ingressClassName": "traefik",
+          "tlsEnabled": true
+        }
+      },
+      "measured": {
+        "width": 277,
+        "height": 209
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "ingress-19",
+      "type": "architecture",
+      "position": {
+        "x": -1042.2447877517318,
+        "y": 382.2063714597349
+      },
+      "data": {
+        "label": "Ingress",
+        "componentId": "ingress",
+        "properties": {
+          "name": "minio-api",
+          "host": "minio.chameleonmountain.com",
+          "path": "/",
+          "pathType": "Prefix",
+          "ingressClassName": "traefik",
+          "tlsEnabled": true
+        }
+      },
+      "measured": {
+        "width": 229,
+        "height": 209
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "statefulset-20",
+      "type": "architecture",
+      "position": {
+        "x": -2676.6635992237616,
+        "y": 808.5387903922116
+      },
+      "data": {
+        "label": "StatefulSet",
+        "componentId": "statefulset",
+        "properties": {
+          "name": "airflow",
+          "replicas": 1,
+          "serviceName": "airflow-headless",
+          "podManagementPolicy": "OrderedReady",
+          "volumeClaimSize": "10Gi",
+          "secretName": "",
+          "configMapName": ""
+        }
+      },
+      "measured": {
+        "width": 396,
+        "height": 214
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "managed_pod_statefulset-20_0",
+      "type": "architecture",
+      "position": {
+        "x": -1944.6635992237616,
+        "y": 786.5387903922116
+      },
+      "data": {
+        "componentId": "pod",
+        "label": "my-statefulset-0",
+        "status": "healthy",
+        "labelStatus": "Running (18%)",
+        "isInitial": false,
+        "properties": {
+          "cpuLimit": "500m",
+          "memoryLimit": "256Mi",
+          "secretName": "",
+          "configMapName": "",
+          "restartCount": 5,
+          "lastCrash": 1767970369303
+        },
+        "managedBy": "statefulset-20",
+        "scheduledTo": "worker-nodes-2",
+        "virtualNode": "node-1",
+        "isReady": true,
+        "logs": [
+          "[18:01:07] [INFO] Pulling image \"nginx:latest\"",
+          "[18:01:09] [INFO] Successfully pulled image",
+          "[18:01:09] [INFO] Created container application",
+          "[18:01:09] [INFO] Started container application",
+          "[18:01:11] [INFO] Readiness probe succeeded. Pod is READY.",
+          "[14:50:46] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:50:46] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:50:49] [SYSTEM] Back-off restarting failed container",
+          "[14:50:55] [SYSTEM] Restarting container",
+          "[14:50:55] [INFO] Started container application",
+          "[14:50:56] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:50:56] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:50:59] [SYSTEM] Back-off restarting failed container",
+          "[14:51:05] [SYSTEM] Restarting container",
+          "[14:51:05] [INFO] Started container application",
+          "[14:51:48] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:51:48] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:51:51] [SYSTEM] Back-off restarting failed container",
+          "[14:51:57] [SYSTEM] Restarting container",
+          "[14:51:57] [INFO] Started container application",
+          "[14:51:58] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:51:58] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:52:01] [SYSTEM] Back-off restarting failed container",
+          "[14:52:07] [SYSTEM] Restarting container",
+          "[14:52:07] [INFO] Started container application",
+          "[14:52:49] [ERROR] panic: runtime error: out of memory\\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x0]",
+          "[14:52:49] [SYSTEM] Process OOMKilled by kernel. Usage: 346Mi / Limit: 256Mi",
+          "[14:52:52] [SYSTEM] Back-off restarting failed container",
+          "[14:52:58] [SYSTEM] Restarting container",
+          "[14:52:58] [INFO] Started container application"
+        ]
+      },
+      "measured": {
+        "width": 291,
+        "height": 225
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "sidecar-21",
+      "type": "architecture",
+      "position": {
+        "x": -1926.6635992237616,
+        "y": 1049.2887903922115
+      },
+      "data": {
+        "label": "Sidecar Container",
+        "componentId": "sidecar",
+        "properties": {}
+      },
+      "measured": {
+        "width": 229,
+        "height": 88
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "storageclass-22",
+      "type": "architecture",
+      "position": {
+        "x": -3322.4936274625275,
+        "y": 509.3144795084437
+      },
+      "data": {
+        "label": "StorageClass",
+        "componentId": "storageclass",
+        "properties": {
+          "provisioner": "ebs.csi.aws.com",
+          "volumeBindingMode": "WaitForFirstConsumer",
+          "reclaimPolicy": "Delete",
+          "allowVolumeExpansion": true
+        }
+      },
+      "measured": {
+        "width": 244,
+        "height": 171
+      },
+      "selected": true,
+      "dragging": false
+    },
+    {
+      "id": "pv-pvc-24",
+      "type": "architecture",
+      "position": {
+        "x": -3330.53376857037,
+        "y": 850.1775847471179
+      },
+      "data": {
+        "label": "PV/PVC",
+        "componentId": "pv-pvc",
+        "properties": {
+          "accessMode": "ReadWriteOnce",
+          "storageSize": "10Gi",
+          "storageClass": "gp2"
+        }
+      },
+      "measured": {
+        "width": 187,
+        "height": 134
+      },
+      "selected": false,
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "control-plane-1",
+      "sourceHandle": "output-bottom-config",
+      "target": "worker-nodes-2",
+      "targetHandle": "input-config",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "bottom-config"
+      },
+      "id": "xy-edge__control-plane-1output-bottom-config-worker-nodes-2input-config"
+    },
+    {
+      "type": "traffic",
+      "animated": true,
+      "source": "users-6",
+      "sourceHandle": "output-bottom-traffic-out",
+      "target": "load-balancer-5",
+      "targetHandle": "input-traffic-in",
+      "data": {
+        "trafficLevel": "low",
+        "portType": "bottom-traffic-out"
+      },
+      "id": "xy-edge__users-6output-bottom-traffic-out-load-balancer-5input-traffic-in"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "prometheus-7",
+      "sourceHandle": "output-bottom-metrics",
+      "target": "grafana-9",
+      "targetHandle": "input-bottom-metrics",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "bottom-metrics"
+      },
+      "id": "xy-edge__prometheus-7output-bottom-metrics-grafana-9input-bottom-metrics"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "loki-8",
+      "sourceHandle": "output-logs",
+      "target": "grafana-9",
+      "targetHandle": "input-bottom-logs",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "logs"
+      },
+      "id": "xy-edge__loki-8output-logs-grafana-9input-bottom-logs"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "worker-nodes-2",
+      "sourceHandle": "output-bottom-logs",
+      "target": "loki-8",
+      "targetHandle": "input-logs",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "bottom-logs"
+      },
+      "id": "xy-edge__worker-nodes-2output-bottom-logs-loki-8input-logs"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "worker-nodes-2",
+      "sourceHandle": "output-bottom-metrics",
+      "target": "prometheus-7",
+      "targetHandle": "input-metrics",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "bottom-metrics"
+      },
+      "id": "xy-edge__worker-nodes-2output-bottom-metrics-prometheus-7input-metrics"
+    },
+    {
+      "id": "edge_deployment-10_to_managed_rs_deployment-10",
+      "source": "deployment-10",
+      "sourceHandle": "output-scaling",
+      "target": "managed_rs_deployment-10",
+      "targetHandle": "input-scaling",
+      "type": "traffic",
+      "data": {
+        "trafficLevel": "idle",
+        "label": "manages",
+        "portType": "scaling"
+      },
+      "animated": false
+    },
+    {
+      "id": "scheduling_managed_pod_deployment-10_0_to_worker-nodes-2",
+      "source": "managed_pod_deployment-10_0",
+      "sourceHandle": "output-traffic-out",
+      "target": "worker-nodes-2",
+      "targetHandle": "input-traffic-in",
+      "type": "traffic",
+      "data": {
+        "trafficLevel": "idle",
+        "label": "→ node-2",
+        "portType": "traffic-in",
+        "isSchedulingEdge": true
+      },
+      "animated": false,
+      "style": {
+        "strokeDasharray": "5,5",
+        "opacity": 0.5
+      }
+    },
+    {
+      "id": "edge_rs_to_managed_pod_deployment-10_0",
+      "source": "managed_rs_deployment-10",
+      "target": "managed_pod_deployment-10_0",
+      "sourceHandle": "output-scaling",
+      "targetHandle": "input-traffic-in",
+      "type": "traffic",
+      "data": {
+        "trafficLevel": "low",
+        "label": "creates",
+        "portType": "scaling"
+      },
+      "animated": true
+    },
+    {
+      "id": "scheduling_managed_pod_deployment-10_0_to_worker-nodes-2",
+      "source": "managed_pod_deployment-10_0",
+      "sourceHandle": "output-traffic-out",
+      "target": "worker-nodes-2",
+      "targetHandle": "input-traffic-in",
+      "type": "traffic",
+      "data": {
+        "trafficLevel": "idle",
+        "label": "→ node-2",
+        "portType": "traffic-in",
+        "isSchedulingEdge": true
+      },
+      "animated": false,
+      "style": {
+        "strokeDasharray": "5,5",
+        "opacity": 0.5
+      }
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "load-balancer-5",
+      "sourceHandle": "output-bottom-traffic-out",
+      "target": "ingress-13",
+      "targetHandle": "input-traffic-in",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "bottom-traffic-out"
+      },
+      "id": "xy-edge__load-balancer-5output-bottom-traffic-out-ingress-13input-traffic-in"
+    },
+    {
+      "type": "traffic",
+      "animated": true,
+      "source": "ingress-13",
+      "sourceHandle": "output-bottom-traffic-out",
+      "target": "service-12",
+      "targetHandle": "input-bottom-traffic-in",
+      "data": {
+        "trafficLevel": "low",
+        "portType": "bottom-traffic-out"
+      },
+      "id": "xy-edge__ingress-13output-bottom-traffic-out-service-12input-bottom-traffic-in"
+    },
+    {
+      "type": "traffic",
+      "animated": true,
+      "source": "service-12",
+      "sourceHandle": "output-traffic-out",
+      "target": "managed_pod_deployment-10_0",
+      "targetHandle": "input-bottom-traffic-in",
+      "data": {
+        "trafficLevel": "low",
+        "portType": "traffic-out"
+      },
+      "id": "xy-edge__service-12output-traffic-out-managed_pod_deployment-10_0input-bottom-traffic-in"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "managed_pod_deployment-10_0",
+      "sourceHandle": "output-metrics",
+      "target": "prometheus-7",
+      "targetHandle": "input-bottom-metrics",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "metrics"
+      },
+      "id": "xy-edge__managed_pod_deployment-10_0output-metrics-prometheus-7input-bottom-metrics"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "managed_pod_deployment-10_0",
+      "sourceHandle": "output-logs",
+      "target": "loki-8",
+      "targetHandle": "input-bottom-logs",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "logs"
+      },
+      "id": "xy-edge__managed_pod_deployment-10_0output-logs-loki-8input-bottom-logs"
+    },
+    {
+      "id": "edge_sts_statefulset-14_to_managed_pod_statefulset-14_0",
+      "source": "statefulset-14",
+      "sourceHandle": "output-scaling",
+      "target": "managed_pod_statefulset-14_0",
+      "targetHandle": "input-traffic-in",
+      "type": "traffic",
+      "data": {
+        "trafficLevel": "low",
+        "label": "manages"
+      },
+      "animated": true
+    },
+    {
+      "type": "traffic",
+      "animated": true,
+      "source": "headless-service-16",
+      "sourceHandle": "output-traffic-out",
+      "target": "managed_pod_statefulset-14_0",
+      "targetHandle": "input-bottom-traffic-in",
+      "data": {
+        "trafficLevel": "low",
+        "portType": "traffic-out"
+      },
+      "id": "xy-edge__headless-service-16output-traffic-out-managed_pod_statefulset-14_0input-bottom-traffic-in"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "load-balancer-5",
+      "sourceHandle": "output-bottom-traffic-out",
+      "target": "ingress-18",
+      "targetHandle": "input-traffic-in",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "bottom-traffic-out"
+      },
+      "id": "xy-edge__load-balancer-5output-bottom-traffic-out-ingress-18input-traffic-in"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "load-balancer-5",
+      "sourceHandle": "output-bottom-traffic-out",
+      "target": "ingress-19",
+      "targetHandle": "input-traffic-in",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "bottom-traffic-out"
+      },
+      "id": "xy-edge__load-balancer-5output-bottom-traffic-out-ingress-19input-traffic-in"
+    },
+    {
+      "type": "traffic",
+      "animated": true,
+      "source": "ingress-18",
+      "sourceHandle": "output-traffic-out",
+      "target": "headless-service-16",
+      "targetHandle": "input-traffic-in",
+      "data": {
+        "trafficLevel": "low",
+        "portType": "traffic-out"
+      },
+      "id": "xy-edge__ingress-18output-traffic-out-headless-service-16input-traffic-in"
+    },
+    {
+      "type": "traffic",
+      "animated": true,
+      "source": "ingress-19",
+      "sourceHandle": "output-traffic-out",
+      "target": "headless-service-16",
+      "targetHandle": "input-bottom-traffic-in",
+      "data": {
+        "trafficLevel": "low",
+        "portType": "traffic-out"
+      },
+      "id": "xy-edge__ingress-19output-traffic-out-headless-service-16input-bottom-traffic-in"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "statefulset-14",
+      "sourceHandle": "output-metrics",
+      "target": "prometheus-7",
+      "targetHandle": "input-bottom-metrics",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "metrics"
+      },
+      "id": "xy-edge__statefulset-14output-metrics-prometheus-7input-bottom-metrics"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "statefulset-14",
+      "sourceHandle": "output-logs",
+      "target": "loki-8",
+      "targetHandle": "input-bottom-logs",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "logs"
+      },
+      "id": "xy-edge__statefulset-14output-logs-loki-8input-bottom-logs"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "managed_pod_statefulset-14_0",
+      "sourceHandle": "output-metrics",
+      "target": "prometheus-7",
+      "targetHandle": "input-bottom-metrics",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "metrics"
+      },
+      "id": "xy-edge__managed_pod_statefulset-14_0output-metrics-prometheus-7input-bottom-metrics"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "managed_pod_statefulset-14_0",
+      "sourceHandle": "output-logs",
+      "target": "loki-8",
+      "targetHandle": "input-bottom-logs",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "logs"
+      },
+      "id": "xy-edge__managed_pod_statefulset-14_0output-logs-loki-8input-bottom-logs"
+    },
+    {
+      "id": "edge_sts_statefulset-20_to_managed_pod_statefulset-20_0",
+      "source": "statefulset-20",
+      "sourceHandle": "output-scaling",
+      "target": "managed_pod_statefulset-20_0",
+      "targetHandle": "input-traffic-in",
+      "type": "traffic",
+      "data": {
+        "trafficLevel": "low",
+        "label": "manages"
+      },
+      "animated": true
+    },
+    {
+      "type": "traffic",
+      "animated": true,
+      "source": "sidecar-21",
+      "sourceHandle": "output-traffic-out",
+      "target": "managed_pod_statefulset-20_0",
+      "targetHandle": "input-bottom-traffic-in",
+      "data": {
+        "trafficLevel": "low",
+        "portType": "traffic-out"
+      },
+      "id": "xy-edge__sidecar-21output-traffic-out-managed_pod_statefulset-20_0input-bottom-traffic-in"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "storageclass-22",
+      "sourceHandle": "output-bottom-config",
+      "target": "pv-pvc-24",
+      "targetHandle": "input-config",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "bottom-config"
+      },
+      "id": "xy-edge__storageclass-22output-bottom-config-pv-pvc-24input-config"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "pv-pvc-24",
+      "sourceHandle": "output-config",
+      "target": "statefulset-14",
+      "targetHandle": "input-bottom-config",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "config"
+      },
+      "id": "xy-edge__pv-pvc-24output-config-statefulset-14input-bottom-config"
+    },
+    {
+      "type": "traffic",
+      "animated": false,
+      "source": "pv-pvc-24",
+      "sourceHandle": "output-config",
+      "target": "statefulset-20",
+      "targetHandle": "input-bottom-config",
+      "data": {
+        "trafficLevel": "idle",
+        "portType": "config"
+      },
+      "id": "xy-edge__pv-pvc-24output-config-statefulset-20input-bottom-config"
+    }
+  ],
+  "version": "1.0",
+  "exportedAt": "2026-01-10T12:29:39.967Z",
+  "type": "system-craft-scenario"
+}

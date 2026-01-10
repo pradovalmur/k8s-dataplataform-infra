@@ -1,0 +1,378 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orchestration
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: airflow-env
+  namespace: orchestration
+type: Opaque
+stringData:
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+  AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+  AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+  AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
+  AIRFLOW__CORE__FERNET_KEY: zkkfylToKRbUTQ8PjoMO6z1qvSbCvZUBMFFWWnf36X8
+  AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True"
+  AIRFLOW__CORE__DEFAULT_TIMEZONE: Europe/Lisbon
+  AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/repo
+  AIRFLOW__WEBSERVER__RBAC: "True"
+  AIRFLOW__WEBSERVER__AUTHENTICATE: "True"
+  AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "True"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: airflow-admin
+  namespace: orchestration
+type: Opaque
+stringData:
+  AIRFLOW_ADMIN_USERNAME: admin
+  AIRFLOW_ADMIN_PASSWORD: super-secret-admin
+  AIRFLOW_ADMIN_EMAIL: admin@example.com
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: airflow-git-sync
+  namespace: orchestration
+type: Opaque
+stringData:
+  GIT_SYNC_REPO: "https://github.com/pradovalmur/k8s-dataplataform-dags.git"
+  GIT_SYNC_BRANCH: "main"
+  GIT_SYNC_WAIT: "30"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: airflow-logging
+  namespace: orchestration
+type: Opaque
+stringData:
+  AIRFLOW__LOGGING__REMOTE_LOGGING: "True"
+  AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER: "s3://airflow-logs"
+  AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: "minio_s3"
+  AIRFLOW_CONN_MINIO_S3: >-
+    aws://MINIO_ACCESS_KEY:MINIO_SECRET_KEY@?region_name=us-east-1&endpoint_url=http%3A%2F%2Fminio.minio.svc.cluster.local%3A9000
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: airflow
+  namespace: orchestration
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: orchestration
+spec:
+  selector:
+    app: airflow-redis
+  ports:
+    - port: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-redis
+  namespace: orchestration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-redis
+  template:
+    metadata:
+      labels:
+        app: airflow-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7
+          ports:
+            - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: orchestration
+spec:
+  selector:
+    app: airflow-postgres
+  ports:
+    - port: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: airflow-postgres
+  namespace: orchestration
+  labels:
+    app: airflow-postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-postgres
+  template:
+    metadata:
+      labels:
+        app: airflow-postgres
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: "OnRootMismatch"
+      containers:
+        - name: postgres
+          image: postgres:15
+          env:
+            - name: POSTGRES_DB
+              value: airflow
+            - name: POSTGRES_USER
+              value: airflow
+            - name: POSTGRES_PASSWORD
+              value: airflow
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: hcloud-volumes
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: airflow-init
+  namespace: orchestration
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: airflow
+      containers:
+        - name: init
+          image: apache/airflow:2.10.2
+          command: ["bash","-c"]
+          args:
+            - |
+              until nc -z postgres 5432; do sleep 3; done
+              until nc -z redis 6379; do sleep 3; done
+              airflow db migrate
+              airflow users create \
+                --role Admin \
+                --username "$AIRFLOW_ADMIN_USERNAME" \
+                --firstname Admin \
+                --lastname User \
+                --email "$AIRFLOW_ADMIN_EMAIL" \
+                --password "$AIRFLOW_ADMIN_PASSWORD" || true
+          envFrom:
+            - secretRef: { name: airflow-env }
+            - secretRef: { name: airflow-admin }
+            - secretRef: { name: airflow-logging }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+  namespace: orchestration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-scheduler
+  template:
+    metadata:
+      labels:
+        app: airflow-scheduler
+    spec:
+      serviceAccountName: airflow
+      containers:
+        - name: scheduler
+          image: apache/airflow:2.10.2
+          command: ["bash","-c"]
+          args: ["until nc -z redis 6379; do sleep 3; done; exec airflow scheduler"]
+          envFrom:
+            - secretRef: { name: airflow-env }
+            - secretRef: { name: airflow-logging }
+          volumeMounts:
+            - name: dags
+              mountPath: /opt/airflow/dags
+
+        - name: git-sync
+          image: registry.k8s.io/git-sync/git-sync:v4.2.3
+          env:
+            - name: GIT_SYNC_REPO
+              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_REPO } }
+            - name: GIT_SYNC_BRANCH
+              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_BRANCH } }
+            - name: GIT_SYNC_ROOT
+              value: "/git"
+            - name: GIT_SYNC_DEST
+              value: "repo"
+            - name: GIT_SYNC_WAIT
+              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_WAIT } }
+            - name: GIT_SYNC_ONE_TIME
+              value: "false"
+          volumeMounts:
+            - name: dags
+              mountPath: /git
+      volumes:
+        - name: dags
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-worker
+  namespace: orchestration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-worker
+  template:
+    metadata:
+      labels:
+        app: airflow-worker
+    spec:
+      serviceAccountName: airflow
+      containers:
+        - name: worker
+          image: apache/airflow:2.10.2
+          command: ["bash","-c"]
+          args: ["until nc -z redis 6379; do sleep 3; done; exec airflow celery worker"]
+          envFrom:
+            - secretRef: { name: airflow-env }
+            - secretRef: { name: airflow-logging }
+          volumeMounts:
+            - name: dags
+              mountPath: /opt/airflow/dags
+
+        - name: git-sync
+          image: registry.k8s.io/git-sync/git-sync:v4.2.3
+          env:
+            - name: GIT_SYNC_REPO
+              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_REPO } }
+            - name: GIT_SYNC_BRANCH
+              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_BRANCH } }
+            - name: GIT_SYNC_ROOT
+              value: "/git"
+            - name: GIT_SYNC_DEST
+              value: "repo"
+            - name: GIT_SYNC_WAIT
+              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_WAIT } }
+            - name: GIT_SYNC_ONE_TIME
+              value: "false"
+          volumeMounts:
+            - name: dags
+              mountPath: /git
+      volumes:
+        - name: dags
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-webserver
+  namespace: orchestration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-webserver
+  template:
+    metadata:
+      labels:
+        app: airflow-webserver
+    spec:
+      serviceAccountName: airflow
+      containers:
+        - name: webserver
+          image: apache/airflow:2.10.2
+          command: ["bash","-c"]
+          args: ["until nc -z redis 6379; do sleep 3; done; exec airflow webserver --port 8080"]
+          envFrom:
+            - secretRef: { name: airflow-env }
+            - secretRef: { name: airflow-logging }
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: dags
+              mountPath: /opt/airflow/dags
+
+        - name: git-sync
+          image: registry.k8s.io/git-sync/git-sync:v4.2.3
+          env:
+            - name: GIT_SYNC_REPO
+              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_REPO } }
+            - name: GIT_SYNC_BRANCH
+              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_BRANCH } }
+            - name: GIT_SYNC_ROOT
+              value: "/git"
+            - name: GIT_SYNC_DEST
+              value: "repo"
+            - name: GIT_SYNC_WAIT
+              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_WAIT } }
+            - name: GIT_SYNC_ONE_TIME
+              value: "false"
+          volumeMounts:
+            - name: dags
+              mountPath: /git
+      volumes:
+        - name: dags
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-web
+  namespace: orchestration
+spec:
+  selector:
+    app: airflow-webserver
+  ports:
+    - port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: airflow
+  namespace: orchestration
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [airflow.chameleonmountain.com]
+      secretName: wildcard-tls
+  rules:
+    - host: airflow.chameleonmountain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: airflow-web
+                port:
+                  number: 8080
