@@ -1,0 +1,188 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: analytics
+---
+# -------------------------
+# Secrets (Metabase + Postgres)
+# -------------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: metabase-postgres
+  namespace: analytics
+type: Opaque
+stringData:
+  POSTGRES_DB: metabase
+  POSTGRES_USER: metabase
+  POSTGRES_PASSWORD: "Metabase_plataform"
+---
+# -------------------------
+# Postgres (Metabase app DB)
+# -------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: metabase-db
+  namespace: analytics
+spec:
+  selector:
+    app: metabase-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: metabase-db
+  namespace: analytics
+spec:
+  serviceName: metabase-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: metabase-db
+  template:
+    metadata:
+      labels:
+        app: metabase-db
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: "OnRootMismatch"
+      containers:
+        - name: postgres
+          image: postgres:15
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_DB
+              valueFrom: { secretKeyRef: { name: metabase-postgres, key: POSTGRES_DB } }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: metabase-postgres, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: metabase-postgres, key: POSTGRES_PASSWORD } }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: hcloud-volumes
+        resources:
+          requests:
+            storage: 10Gi
+---
+# -------------------------
+# Metabase Service
+# -------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: metabase
+  namespace: analytics
+spec:
+  selector:
+    app: metabase
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+# -------------------------
+# Metabase Deployment
+# -------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metabase
+  namespace: analytics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: metabase
+  template:
+    metadata:
+      labels:
+        app: metabase
+    spec:
+      containers:
+        - name: metabase
+          image: metabase/metabase:v0.49.19
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: MB_DB_TYPE
+              value: postgres
+            - name: MB_DB_HOST
+              value: metabase-db
+            - name: MB_DB_PORT
+              value: "5432"
+            - name: MB_DB_DBNAME
+              valueFrom: { secretKeyRef: { name: metabase-postgres, key: POSTGRES_DB } }
+            - name: MB_DB_USER
+              valueFrom: { secretKeyRef: { name: metabase-postgres, key: POSTGRES_USER } }
+            - name: MB_DB_PASS
+              valueFrom: { secretKeyRef: { name: metabase-postgres, key: POSTGRES_PASSWORD } }
+            - name: JAVA_TIMEZONE
+              value: Europe/Lisbon
+          readinessProbe:
+            httpGet: { path: /api/health, port: 3000 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 10
+          livenessProbe:
+            httpGet: { path: /api/health, port: 3000 }
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits:   { cpu: "1",    memory: "1Gi" }
+---
+# -------------------------
+# Metabase Ingress (Traefik)
+# -------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: metabase
+  namespace: analytics
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - metabase.chameleonmountain.com
+      secretName: wildcard-tls
+  rules:
+    - host: metabase.chameleonmountain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: metabase
+                port:
+                  number: 3000

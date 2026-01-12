@@ -24,9 +24,42 @@ metadata:
   namespace: analytics
 type: Opaque
 stringData:
-  # use as credenciais do MinIO (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD)
   S3_ACCESS_KEY: "minioadmin"
   S3_SECRET_KEY: "minioadmin123"
+---
+# -------------------------
+# Iceberg JDBC Catalog schema (Postgres init)
+# -------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iceberg-jdbc-initdb
+  namespace: analytics
+data:
+  01_iceberg_jdbc_catalog.sql: |
+    -- Minimal tables required by Trino Iceberg JDBC catalog (Trino 414+ doesn't auto-create)
+    -- Source of behavior change: Trino issue #20419 and docs note requiring pre-existing tables.
+    CREATE TABLE IF NOT EXISTS iceberg_tables (
+      catalog_name VARCHAR(255) NOT NULL,
+      table_namespace VARCHAR(255) NOT NULL,
+      table_name VARCHAR(255) NOT NULL,
+      metadata_location TEXT,
+      previous_metadata_location TEXT,
+      iceberg_type VARCHAR(32),
+      PRIMARY KEY (catalog_name, table_namespace, table_name)
+    );
+
+    CREATE INDEX IF NOT EXISTS iceberg_tables_ns_idx
+      ON iceberg_tables (catalog_name, table_namespace);
+
+    -- Optional, but commonly used by Iceberg JDBC catalog for namespace properties
+    CREATE TABLE IF NOT EXISTS iceberg_namespace_properties (
+      catalog_name VARCHAR(255) NOT NULL,
+      namespace VARCHAR(255) NOT NULL,
+      property_key VARCHAR(255) NOT NULL,
+      property_value TEXT,
+      PRIMARY KEY (catalog_name, namespace, property_key)
+    );
 ---
 # -------------------------
 # Postgres (Iceberg JDBC catalog)
@@ -37,6 +70,7 @@ metadata:
   name: iceberg-catalog
   namespace: analytics
 spec:
+  clusterIP: None
   selector:
     app: iceberg-catalog
   ports:
@@ -86,6 +120,13 @@ spec:
           volumeMounts:
             - name: pgdata
               mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: initdb
+          configMap:
+            name: iceberg-jdbc-initdb
   volumeClaimTemplates:
     - metadata:
         name: pgdata
@@ -125,6 +166,7 @@ metadata:
 data:
   config.properties: |
     coordinator=true
+    discovery-server.enabled=true
     node-scheduler.include-coordinator=false
     http-server.http.port=8080
     http-server.process-forwarded=true
@@ -164,13 +206,10 @@ data:
     iceberg.jdbc-catalog.connection-user=iceberg
     iceberg.jdbc-catalog.connection-password=${ENV:ICEBERG_DB_PASSWORD}
 
-    # obrigatório (erro que você viu)
     iceberg.jdbc-catalog.catalog-name=iceberg
 
-    # Warehouse no MinIO (bucket analytics)
     iceberg.jdbc-catalog.default-warehouse-dir=s3://analytics/iceberg/warehouse
 
-    # S3/MinIO
     fs.native-s3.enabled=true
     s3.endpoint=http://minio.minio.svc.cluster.local:9000
     s3.region=us-east-1
@@ -179,7 +218,7 @@ data:
     s3.aws-secret-key=${ENV:S3_SECRET_KEY}
 ---
 # -------------------------
-# Trino Coordinator Service (cluster interno)
+# Trino Coordinator Service
 # -------------------------
 apiVersion: v1
 kind: Service
