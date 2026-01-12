@@ -8,5 +8,5 @@ apiserver_private_ip_var: "private_ip"
 apiserver_public_ip_var: "ansible_host"
 
 hcloud_token: "{{ lookup('env','HCLOUD_TOKEN', default='') }}"
-hcloud_network_id: "11819932"
+hcloud_network_id: "11826195"
 

@@ -42,7 +42,7 @@ module "hcloud_cluster" {
   location            = "nbg1"
   image               = "ubuntu-22.04"
   master_server_type  = "cx23"
-  worker_server_type  = "cx23"
+  worker_server_type  = "cx33"
   master_count        = 1
   worker_count        = 2
   ssh_key_ids         = [hcloud_ssh_key.local_key.id]
