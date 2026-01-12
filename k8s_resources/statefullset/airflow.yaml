@@ -14,7 +14,7 @@ stringData:
   AIRFLOW__CORE__EXECUTOR: CeleryExecutor
   AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
   AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
-  AIRFLOW__CORE__FERNET_KEY: zkkfylToKRbUTQ8PjoMO6z1qvSbCvZUBMFFWWnf36X8
+  AIRFLOW__CORE__FERNET_KEY: v3L41ocmX84GbM5FYPCnSaY-5i7kaLdDgTZN3koCXwM=
   AIRFLOW__CORE__LOAD_EXAMPLES: "False"
   AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True"
   AIRFLOW__CORE__DEFAULT_TIMEZONE: Europe/Lisbon
@@ -22,6 +22,9 @@ stringData:
   AIRFLOW__WEBSERVER__RBAC: "True"
   AIRFLOW__WEBSERVER__AUTHENTICATE: "True"
   AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "True"
+
+  # instala requirements.txt via entrypoint oficial
+  _PIP_ADDITIONAL_REQUIREMENTS: "-r /opt/airflow/dags/repo/requirements.txt"
 ---
 apiVersion: v1
 kind: Secret
@@ -56,7 +59,7 @@ stringData:
   AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER: "s3://airflow-logs"
   AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: "minio_s3"
   AIRFLOW_CONN_MINIO_S3: >-
-    aws://MINIO_ACCESS_KEY:MINIO_SECRET_KEY@?region_name=us-east-1&endpoint_url=http%3A%2F%2Fminio.minio.svc.cluster.local%3A9000
+    aws://minioadmin:minioadmin123@?region_name=us-east-1&endpoint_url=http%3A%2F%2Fminio.minio.svc.cluster.local%3A9000
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -112,8 +115,6 @@ kind: StatefulSet
 metadata:
   name: airflow-postgres
   namespace: orchestration
-  labels:
-    app: airflow-postgres
 spec:
   serviceName: postgres
   replicas: 1
@@ -143,7 +144,6 @@ spec:
               value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
-              name: postgres
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
@@ -175,14 +175,16 @@ spec:
             - |
               until nc -z postgres 5432; do sleep 3; done
               until nc -z redis 6379; do sleep 3; done
-              airflow db migrate
-              airflow users create \
-                --role Admin \
-                --username "$AIRFLOW_ADMIN_USERNAME" \
-                --firstname Admin \
-                --lastname User \
-                --email "$AIRFLOW_ADMIN_EMAIL" \
-                --password "$AIRFLOW_ADMIN_PASSWORD" || true
+              exec /entrypoint bash -c "
+                airflow db migrate &&
+                airflow users create \
+                  --role Admin \
+                  --username \"$AIRFLOW_ADMIN_USERNAME\" \
+                  --firstname Admin \
+                  --lastname User \
+                  --email \"$AIRFLOW_ADMIN_EMAIL\" \
+                  --password \"$AIRFLOW_ADMIN_PASSWORD\" || true
+              "
           envFrom:
             - secretRef: { name: airflow-env }
             - secretRef: { name: airflow-admin }
@@ -208,14 +210,17 @@ spec:
         - name: scheduler
           image: apache/airflow:2.10.2
           command: ["bash","-c"]
-          args: ["until nc -z redis 6379; do sleep 3; done; exec airflow scheduler"]
+          args:
+            - |
+              until nc -z postgres 5432; do sleep 3; done
+              until nc -z redis 6379; do sleep 3; done
+              exec /entrypoint airflow scheduler
           envFrom:
             - secretRef: { name: airflow-env }
             - secretRef: { name: airflow-logging }
           volumeMounts:
             - name: dags
               mountPath: /opt/airflow/dags
-
         - name: git-sync
           image: registry.k8s.io/git-sync/git-sync:v4.2.3
           env:
@@ -229,8 +234,6 @@ spec:
               value: "repo"
             - name: GIT_SYNC_WAIT
               valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_WAIT } }
-            - name: GIT_SYNC_ONE_TIME
-              value: "false"
           volumeMounts:
             - name: dags
               mountPath: /git
@@ -258,14 +261,17 @@ spec:
         - name: worker
           image: apache/airflow:2.10.2
           command: ["bash","-c"]
-          args: ["until nc -z redis 6379; do sleep 3; done; exec airflow celery worker"]
+          args:
+            - |
+              until nc -z postgres 5432; do sleep 3; done
+              until nc -z redis 6379; do sleep 3; done
+              exec /entrypoint airflow celery worker
           envFrom:
             - secretRef: { name: airflow-env }
             - secretRef: { name: airflow-logging }
           volumeMounts:
             - name: dags
               mountPath: /opt/airflow/dags
-
         - name: git-sync
           image: registry.k8s.io/git-sync/git-sync:v4.2.3
           env:
@@ -279,8 +285,6 @@ spec:
               value: "repo"
             - name: GIT_SYNC_WAIT
               valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_WAIT } }
-            - name: GIT_SYNC_ONE_TIME
-              value: "false"
           volumeMounts:
             - name: dags
               mountPath: /git
@@ -308,7 +312,11 @@ spec:
         - name: webserver
           image: apache/airflow:2.10.2
           command: ["bash","-c"]
-          args: ["until nc -z redis 6379; do sleep 3; done; exec airflow webserver --port 8080"]
+          args:
+            - |
+              until nc -z postgres 5432; do sleep 3; done
+              until nc -z redis 6379; do sleep 3; done
+              exec /entrypoint airflow webserver --port 8080
           envFrom:
             - secretRef: { name: airflow-env }
             - secretRef: { name: airflow-logging }
@@ -317,7 +325,6 @@ spec:
           volumeMounts:
             - name: dags
               mountPath: /opt/airflow/dags
-
         - name: git-sync
           image: registry.k8s.io/git-sync/git-sync:v4.2.3
           env:
@@ -331,8 +338,6 @@ spec:
               value: "repo"
             - name: GIT_SYNC_WAIT
               valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_WAIT } }
-            - name: GIT_SYNC_ONE_TIME
-              value: "false"
           volumeMounts:
             - name: dags
               mountPath: /git
