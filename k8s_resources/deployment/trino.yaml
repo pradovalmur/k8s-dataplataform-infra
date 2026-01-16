@@ -37,8 +37,6 @@ metadata:
   namespace: analytics
 data:
   01_iceberg_jdbc_catalog.sql: |
-    -- Minimal tables required by Trino Iceberg JDBC catalog (Trino 414+ doesn't auto-create)
-    -- Source of behavior change: Trino issue #20419 and docs note requiring pre-existing tables.
     CREATE TABLE IF NOT EXISTS iceberg_tables (
       catalog_name VARCHAR(255) NOT NULL,
       table_namespace VARCHAR(255) NOT NULL,
@@ -52,7 +50,6 @@ data:
     CREATE INDEX IF NOT EXISTS iceberg_tables_ns_idx
       ON iceberg_tables (catalog_name, table_namespace);
 
-    -- Optional, but commonly used by Iceberg JDBC catalog for namespace properties
     CREATE TABLE IF NOT EXISTS iceberg_namespace_properties (
       catalog_name VARCHAR(255) NOT NULL,
       namespace VARCHAR(255) NOT NULL,
@@ -166,10 +163,11 @@ metadata:
 data:
   config.properties: |
     coordinator=true
-    discovery-server.enabled=true
     node-scheduler.include-coordinator=false
     http-server.http.port=8080
     http-server.process-forwarded=true
+
+    # FIX: Trino 479 não usa discovery-server.enabled (isso quebra o boot)
     discovery.uri=http://trino-coordinator:8080
 
     query.max-memory=1GB
@@ -185,6 +183,7 @@ data:
   config.properties: |
     coordinator=false
     http-server.http.port=8080
+
     discovery.uri=http://trino-coordinator:8080
 
     query.max-memory=1GB
@@ -218,7 +217,7 @@ data:
     s3.aws-secret-key=${ENV:S3_SECRET_KEY}
 ---
 # -------------------------
-# Trino Coordinator Service
+# Trino Coordinator Service (cluster-internal)
 # -------------------------
 apiVersion: v1
 kind: Service
