@@ -1,12 +1,14 @@
+# Airflow “base” image (sem dbt/cosmos) pra não quebrar suas DAGs atuais
 FROM apache/airflow:2.10.2
 
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git \
+    && rm -rf /var/lib/apt/lists/*
 USER airflow
 
-# instala com constraints do Airflow 2.10.2 (python 3.12)
+# (Opcional, mas recomendado p/ rodar dbt em pod separado depois)
+# Garante que o KubernetesPodOperator/provider esteja disponível.
 RUN pip install --no-cache-dir \
   --constraint https://raw.githubusercontent.com/apache/airflow/constraints-2.10.2/constraints-3.12.txt \
-  "astronomer-cosmos" \
-  "dbt-core" \
-  "dbt-trino"
+  apache-airflow-providers-cncf-kubernetes

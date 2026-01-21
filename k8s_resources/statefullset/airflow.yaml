@@ -3,6 +3,36 @@ kind: Namespace
 metadata:
   name: orchestration
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-kpo
+  namespace: orchestration
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get","list","watch","create","delete","patch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get","list","watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get","list","watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-kpo
+  namespace: orchestration
+subjects:
+  - kind: ServiceAccount
+    name: airflow
+    namespace: orchestration
+roleRef:
+  kind: Role
+  name: airflow-kpo
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -105,6 +135,7 @@ spec:
       containers:
         - name: redis
           image: redis:7
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 6379
 ---
@@ -142,6 +173,7 @@ spec:
       containers:
         - name: postgres
           image: postgres:15
+          imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_DB
               value: airflow
@@ -178,7 +210,8 @@ spec:
       serviceAccountName: airflow
       containers:
         - name: init
-          image: pradovalmur/airflow:2.10.2-dbt
+          image: pradovalmur/airflow:2.10.2-base-0120
+          imagePullPolicy: Always
           command: ["bash","-c"]
           args:
             - |
@@ -225,7 +258,8 @@ spec:
             name: airflow-requirements
       initContainers:
         - name: pip-install
-          image: pradovalmur/airflow:2.10.2-dbt
+          image: pradovalmur/airflow:2.10.2-base-0120
+          imagePullPolicy: Always
           command: ["bash","-c"]
           args:
             - |
@@ -237,7 +271,8 @@ spec:
               mountPath: /requirements
       containers:
         - name: scheduler
-          image: pradovalmur/airflow:2.10.2-dbt
+          image: pradovalmur/airflow:2.10.2-base-0120
+          imagePullPolicy: Always
           command: ["bash","-c"]
           args:
             - |
@@ -257,6 +292,7 @@ spec:
               mountPath: /opt/airflow/custom-packages
         - name: git-sync
           image: registry.k8s.io/git-sync/git-sync:v4.2.3
+          imagePullPolicy: IfNotPresent
           env:
             - name: GIT_SYNC_REPO
               valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_REPO } }
@@ -298,7 +334,8 @@ spec:
             name: airflow-requirements
       initContainers:
         - name: pip-install
-          image: pradovalmur/airflow:2.10.2-dbt
+          image: pradovalmur/airflow:2.10.2-base-0120
+          imagePullPolicy: Always
           command: ["bash","-c"]
           args:
             - |
@@ -310,7 +347,8 @@ spec:
               mountPath: /requirements
       containers:
         - name: worker
-          image: pradovalmur/airflow:2.10.2-dbt
+          image: pradovalmur/airflow:2.10.2-base-0120
+          imagePullPolicy: Always
           command: ["bash","-c"]
           args:
             - |
@@ -330,6 +368,7 @@ spec:
               mountPath: /opt/airflow/custom-packages
         - name: git-sync
           image: registry.k8s.io/git-sync/git-sync:v4.2.3
+          imagePullPolicy: IfNotPresent
           env:
             - name: GIT_SYNC_REPO
               valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_REPO } }
@@ -371,7 +410,8 @@ spec:
             name: airflow-requirements
       initContainers:
         - name: pip-install
-          image: pradovalmur/airflow:2.10.2-dbt
+          image: pradovalmur/airflow:2.10.2-base-0120
+          imagePullPolicy: Always
           command: ["bash","-c"]
           args:
             - |
@@ -383,7 +423,8 @@ spec:
               mountPath: /requirements
       containers:
         - name: webserver
-          image: pradovalmur/airflow:2.10.2-dbt
+          image: pradovalmur/airflow:2.10.2-base-0120
+          imagePullPolicy: Always
           command: ["bash","-c"]
           args:
             - |
@@ -405,6 +446,7 @@ spec:
               mountPath: /opt/airflow/custom-packages
         - name: git-sync
           image: registry.k8s.io/git-sync/git-sync:v4.2.3
+          imagePullPolicy: IfNotPresent
           env:
             - name: GIT_SYNC_REPO
               valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_REPO } }

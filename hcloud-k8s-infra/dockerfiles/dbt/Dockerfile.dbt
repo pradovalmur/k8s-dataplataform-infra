@@ -1,0 +1,26 @@
+# Dockerfile.dbt
+FROM python:3.12-slim
+
+ARG DBT_CORE_VERSION=1.10.7
+ARG DBT_TRINO_VERSION=1.10.1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    git \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# dbt + trino (pinados)
+RUN pip install --no-cache-dir --upgrade pip \
+  && pip install --no-cache-dir \
+    "dbt-core==${DBT_CORE_VERSION}" \
+    "dbt-trino==${DBT_TRINO_VERSION}"
+
+# (opcional) evita warning do trino auth
+# RUN pip install --no-cache-dir keyring
+
+WORKDIR /dbt
+
+# deixa o container "dbt-first": você pode rodar `dbt ...` direto no kubectl
+ENTRYPOINT ["dbt"]
+CMD ["--version"]
