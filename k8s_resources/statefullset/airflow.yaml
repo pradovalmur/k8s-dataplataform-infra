@@ -1,500 +1,93 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: orchestration
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: airflow-kpo
-  namespace: orchestration
-rules:
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get","list","watch","create","delete","patch"]
-  - apiGroups: [""]
-    resources: ["pods/log"]
-    verbs: ["get","list","watch"]
-  - apiGroups: [""]
-    resources: ["events"]
-    verbs: ["get","list","watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: airflow-kpo
-  namespace: orchestration
-subjects:
-  - kind: ServiceAccount
-    name: airflow
-    namespace: orchestration
-roleRef:
-  kind: Role
-  name: airflow-kpo
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: airflow-requirements
-  namespace: orchestration
-data:
-  requirements.txt: |
-    pandas
-    pyarrow
-    s3fs
-    trino
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: airflow-env
-  namespace: orchestration
-type: Opaque
-stringData:
-  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
-  AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-  AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
-  AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
-  AIRFLOW__CORE__FERNET_KEY: v3L41ocmX84GbM5FYPCnSaY-5i7kaLdDgTZN3koCXwM=
-  AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True"
-  AIRFLOW__CORE__DEFAULT_TIMEZONE: Europe/Lisbon
-  AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/repo
-  AIRFLOW__WEBSERVER__RBAC: "True"
-  AIRFLOW__WEBSERVER__AUTHENTICATE: "True"
-  AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "True"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: airflow-admin
-  namespace: orchestration
-type: Opaque
-stringData:
-  AIRFLOW_ADMIN_USERNAME: admin
-  AIRFLOW_ADMIN_PASSWORD: super-secret-admin
-  AIRFLOW_ADMIN_EMAIL: admin@example.com
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: airflow-git-sync
-  namespace: orchestration
-type: Opaque
-stringData:
-  GIT_SYNC_REPO: "https://github.com/pradovalmur/k8s-dataplataform-dags.git"
-  GIT_SYNC_BRANCH: "main"
-  GIT_SYNC_WAIT: "30"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: airflow-logging
-  namespace: orchestration
-type: Opaque
-stringData:
-  AIRFLOW__LOGGING__REMOTE_LOGGING: "True"
-  AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER: "s3://airflow-logs"
-  AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: "minio_s3"
-  AIRFLOW_CONN_MINIO_S3: >-
-    aws://minioadmin:minioadmin123@?region_name=us-east-1&endpoint_url=http%3A%2F%2Fminio.minio.svc.cluster.local%3A9000
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: airflow
-  namespace: orchestration
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis
-  namespace: orchestration
-spec:
-  selector:
-    app: airflow-redis
-  ports:
-    - port: 6379
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: airflow-redis
-  namespace: orchestration
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: airflow-redis
-  template:
-    metadata:
-      labels:
-        app: airflow-redis
-    spec:
-      containers:
-        - name: redis
-          image: redis:7
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 6379
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres
-  namespace: orchestration
-spec:
-  selector:
-    app: airflow-postgres
-  ports:
-    - port: 5432
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: airflow-postgres
-  namespace: orchestration
-spec:
-  serviceName: postgres
-  replicas: 1
-  selector:
-    matchLabels:
-      app: airflow-postgres
-  template:
-    metadata:
-      labels:
-        app: airflow-postgres
-    spec:
-      terminationGracePeriodSeconds: 30
-      securityContext:
-        fsGroup: 999
-        fsGroupChangePolicy: "OnRootMismatch"
-      containers:
-        - name: postgres
-          image: postgres:15
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: POSTGRES_DB
-              value: airflow
-            - name: POSTGRES_USER
-              value: airflow
-            - name: POSTGRES_PASSWORD
-              value: airflow
-            - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
-          ports:
-            - containerPort: 5432
-          volumeMounts:
-            - name: postgres-data
-              mountPath: /var/lib/postgresql/data
-  volumeClaimTemplates:
-    - metadata:
-        name: postgres-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        storageClassName: hcloud-volumes
-        resources:
-          requests:
-            storage: 10Gi
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: airflow-init
-  namespace: orchestration
-spec:
-  template:
-    spec:
-      restartPolicy: OnFailure
-      serviceAccountName: airflow
-      containers:
-        - name: init
-          image: pradovalmur/airflow:2.10.2-base-0120
-          imagePullPolicy: Always
-          command: ["bash","-c"]
-          args:
-            - |
-              until nc -z postgres 5432; do sleep 3; done
-              until nc -z redis 6379; do sleep 3; done
-              exec /entrypoint bash -c "
-                airflow db migrate &&
-                airflow users create \
-                  --role Admin \
-                  --username \"$AIRFLOW_ADMIN_USERNAME\" \
-                  --firstname Admin \
-                  --lastname User \
-                  --email \"$AIRFLOW_ADMIN_EMAIL\" \
-                  --password \"$AIRFLOW_ADMIN_PASSWORD\" || true
-              "
-          envFrom:
-            - secretRef: { name: airflow-env }
-            - secretRef: { name: airflow-admin }
-            - secretRef: { name: airflow-logging }
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: airflow-scheduler
-  namespace: orchestration
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: airflow-scheduler
-  template:
-    metadata:
-      labels:
-        app: airflow-scheduler
-    spec:
-      serviceAccountName: airflow
-      volumes:
-        - name: dags
-          emptyDir: {}
-        - name: site-packages
-          emptyDir: {}
-        - name: requirements
-          configMap:
-            name: airflow-requirements
-      initContainers:
-        - name: pip-install
-          image: pradovalmur/airflow:2.10.2-base-0120
-          imagePullPolicy: Always
-          command: ["bash","-c"]
-          args:
-            - |
-              pip install --no-cache-dir -r /requirements/requirements.txt --target /opt/airflow/custom-packages
-          volumeMounts:
-            - name: site-packages
-              mountPath: /opt/airflow/custom-packages
-            - name: requirements
-              mountPath: /requirements
-      containers:
-        - name: scheduler
-          image: pradovalmur/airflow:2.10.2-base-0120
-          imagePullPolicy: Always
-          command: ["bash","-c"]
-          args:
-            - |
-              until nc -z postgres 5432; do sleep 3; done
-              until nc -z redis 6379; do sleep 3; done
-              exec /entrypoint airflow scheduler
-          env:
-            - name: PYTHONPATH
-              value: /opt/airflow/custom-packages
-          envFrom:
-            - secretRef: { name: airflow-env }
-            - secretRef: { name: airflow-logging }
-          volumeMounts:
-            - name: dags
-              mountPath: /opt/airflow/dags
-            - name: site-packages
-              mountPath: /opt/airflow/custom-packages
-        - name: git-sync
-          image: registry.k8s.io/git-sync/git-sync:v4.2.3
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: GIT_SYNC_REPO
-              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_REPO } }
-            - name: GIT_SYNC_BRANCH
-              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_BRANCH } }
-            - name: GIT_SYNC_ROOT
-              value: "/git"
-            - name: GIT_SYNC_DEST
-              value: "repo"
-            - name: GIT_SYNC_WAIT
-              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_WAIT } }
-          volumeMounts:
-            - name: dags
-              mountPath: /git
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: airflow-worker
-  namespace: orchestration
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: airflow-worker
-  template:
-    metadata:
-      labels:
-        app: airflow-worker
-    spec:
-      serviceAccountName: airflow
-      volumes:
-        - name: dags
-          emptyDir: {}
-        - name: site-packages
-          emptyDir: {}
-        - name: requirements
-          configMap:
-            name: airflow-requirements
-      initContainers:
-        - name: pip-install
-          image: pradovalmur/airflow:2.10.2-base-0120
-          imagePullPolicy: Always
-          command: ["bash","-c"]
-          args:
-            - |
-              pip install --no-cache-dir -r /requirements/requirements.txt --target /opt/airflow/custom-packages
-          volumeMounts:
-            - name: site-packages
-              mountPath: /opt/airflow/custom-packages
-            - name: requirements
-              mountPath: /requirements
-      containers:
-        - name: worker
-          image: pradovalmur/airflow:2.10.2-base-0120
-          imagePullPolicy: Always
-          command: ["bash","-c"]
-          args:
-            - |
-              until nc -z postgres 5432; do sleep 3; done
-              until nc -z redis 6379; do sleep 3; done
-              exec /entrypoint airflow celery worker
-          env:
-            - name: PYTHONPATH
-              value: /opt/airflow/custom-packages
-          envFrom:
-            - secretRef: { name: airflow-env }
-            - secretRef: { name: airflow-logging }
-          volumeMounts:
-            - name: dags
-              mountPath: /opt/airflow/dags
-            - name: site-packages
-              mountPath: /opt/airflow/custom-packages
-        - name: git-sync
-          image: registry.k8s.io/git-sync/git-sync:v4.2.3
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: GIT_SYNC_REPO
-              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_REPO } }
-            - name: GIT_SYNC_BRANCH
-              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_BRANCH } }
-            - name: GIT_SYNC_ROOT
-              value: "/git"
-            - name: GIT_SYNC_DEST
-              value: "repo"
-            - name: GIT_SYNC_WAIT
-              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_WAIT } }
-          volumeMounts:
-            - name: dags
-              mountPath: /git
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: airflow-webserver
-  namespace: orchestration
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: airflow-webserver
-  template:
-    metadata:
-      labels:
-        app: airflow-webserver
-    spec:
-      serviceAccountName: airflow
-      volumes:
-        - name: dags
-          emptyDir: {}
-        - name: site-packages
-          emptyDir: {}
-        - name: requirements
-          configMap:
-            name: airflow-requirements
-      initContainers:
-        - name: pip-install
-          image: pradovalmur/airflow:2.10.2-base-0120
-          imagePullPolicy: Always
-          command: ["bash","-c"]
-          args:
-            - |
-              pip install --no-cache-dir -r /requirements/requirements.txt --target /opt/airflow/custom-packages
-          volumeMounts:
-            - name: site-packages
-              mountPath: /opt/airflow/custom-packages
-            - name: requirements
-              mountPath: /requirements
-      containers:
-        - name: webserver
-          image: pradovalmur/airflow:2.10.2-base-0120
-          imagePullPolicy: Always
-          command: ["bash","-c"]
-          args:
-            - |
-              until nc -z postgres 5432; do sleep 3; done
-              until nc -z redis 6379; do sleep 3; done
-              exec /entrypoint airflow webserver --port 8080
-          env:
-            - name: PYTHONPATH
-              value: /opt/airflow/custom-packages
-          envFrom:
-            - secretRef: { name: airflow-env }
-            - secretRef: { name: airflow-logging }
-          ports:
-            - containerPort: 8080
-          volumeMounts:
-            - name: dags
-              mountPath: /opt/airflow/dags
-            - name: site-packages
-              mountPath: /opt/airflow/custom-packages
-        - name: git-sync
-          image: registry.k8s.io/git-sync/git-sync:v4.2.3
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: GIT_SYNC_REPO
-              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_REPO } }
-            - name: GIT_SYNC_BRANCH
-              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_BRANCH } }
-            - name: GIT_SYNC_ROOT
-              value: "/git"
-            - name: GIT_SYNC_DEST
-              value: "repo"
-            - name: GIT_SYNC_WAIT
-              valueFrom: { secretKeyRef: { name: airflow-git-sync, key: GIT_SYNC_WAIT } }
-          volumeMounts:
-            - name: dags
-              mountPath: /git
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: airflow-web
-  namespace: orchestration
-spec:
-  selector:
-    app: airflow-webserver
-  ports:
-    - port: 8080
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: airflow
-  namespace: orchestration
-  annotations:
-    kubernetes.io/ingress.class: traefik
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
-spec:
-  ingressClassName: traefik
-  tls:
-    - hosts: [airflow.chameleonmountain.com]
-      secretName: wildcard-tls
-  rules:
-    - host: airflow.chameleonmountain.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: airflow-web
-                port:
-                  number: 8080
+from __future__ import annotations
+
+from datetime import datetime
+from airflow import DAG
+from airflow.utils.task_group import TaskGroup
+from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
+
+NAMESPACE = "orchestration"
+SERVICE_ACCOUNT = "airflow"
+
+DBT_IMAGE = "pradovalmur/dbt:1.10.7-trino-1.10.1"
+
+REPO_URL = "https://github.com/pradovalmur/k8s-dataplataform-dags.git"
+REPO_BRANCH = "main"
+
+DBT_PROJECT_REL = "dags/dbt/ipma"
+DBT_RUN = "/tmp/dbt_ipma"
+
+def bash_cmd(dbt_cmd: str) -> str:
+    return f"""
+set -euo pipefail
+
+# instala git (se a imagem já tiver, isso não quebra)
+apk add --no-cache git >/dev/null 2>&1 || true
+
+rm -rf /tmp/repo
+git clone --depth 1 --branch "{REPO_BRANCH}" "{REPO_URL}" /tmp/repo
+
+DBT_SRC="/tmp/repo/{DBT_PROJECT_REL}"
+
+echo "=== repo check ==="
+ls -la "$DBT_SRC" || true
+test -f "$DBT_SRC/dbt_project.yml"
+test -f "$DBT_SRC/profiles.yml"
+
+rm -rf "{DBT_RUN}"
+mkdir -p "{DBT_RUN}"
+
+cp "$DBT_SRC/dbt_project.yml" "{DBT_RUN}/"
+cp "$DBT_SRC/profiles.yml" "{DBT_RUN}/"
+cp -R "$DBT_SRC/models" "{DBT_RUN}/"
+
+unset DBT_GLOBAL_FLAGS DBT_FLAGS || true
+
+echo "=== dbt --version ==="
+dbt --version
+
+echo "=== dbt {dbt_cmd} ==="
+dbt {dbt_cmd} --profiles-dir "{DBT_RUN}" --project-dir "{DBT_RUN}"
+""".strip()
+
+BASE_KPO = dict(
+    namespace=NAMESPACE,
+    image=DBT_IMAGE,
+    image_pull_policy="Always",
+    cmds=["/bin/bash", "-lc"],
+    service_account_name=SERVICE_ACCOUNT,
+    in_cluster=True,
+    is_delete_operator_pod=True,
+    get_logs=True,
+    do_xcom_push=False,
+    startup_timeout_seconds=600,
+)
+
+MODELS = ["stg_ipma_observations"]
+
+with DAG(
+    dag_id="dbt_ipma_run",
+    start_date=datetime(2025, 1, 1),
+    schedule=None,
+    catchup=False,
+    tags=["dbt", "ipma"],
+) as dag:
+
+    with TaskGroup(group_id="dbt_models") as dbt_models:
+        for model in MODELS:
+            dbt_run = KubernetesPodOperator(
+                task_id=f"run__{model}",
+                name=f"dbt-run-{model}".replace("_", "-"),
+                arguments=[bash_cmd(f"run --select {model}")],  # <-- LISTA
+                **BASE_KPO,
+            )
+
+            dbt_test = KubernetesPodOperator(
+                task_id=f"test__{model}",
+                name=f"dbt-test-{model}".replace("_", "-"),
+                arguments=[bash_cmd(f"test --select {model}")],  # <-- LISTA
+                **BASE_KPO,
+            )
+
+            dbt_run >> dbt_test
+
+    dbt_models
