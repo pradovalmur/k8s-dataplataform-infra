@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: pradovalmur/streamlit-trino-dashboard:0.1
+          image: pradovalmur/streamlit-trino-dashboard:0.3
           imagePullPolicy: Always
           ports:
             - containerPort: 8501
