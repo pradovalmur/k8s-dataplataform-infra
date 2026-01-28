@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streamlit-trino-dashboard
+  namespace: analytics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: streamlit-trino-dashboard
+  template:
+    metadata:
+      labels:
+        app: streamlit-trino-dashboard
+    spec:
+      containers:
+        - name: app
+          image: pradovalmur/streamlit-trino-dashboard:0.1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8501
+          env:
+            - name: TRINO_HOST
+              value: "trino.chameleonmountain.com"
+            - name: TRINO_PORT
+              value: "443"
+            - name: TRINO_USER
+              value: "streamlit"
+            - name: TRINO_HTTP_SCHEME
+              value: "https"
+            - name: TRINO_CATALOG
+              value: "iceberg"
+            - name: TRINO_SCHEMA
+              value: "delivery"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8501
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8501
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: streamlit-trino-dashboard
+  namespace: analytics
+spec:
+  selector:
+    app: streamlit-trino-dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8501
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: streamlit-trino-dashboard
+  namespace: analytics
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/redirect-entry-point: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - dashboard.chameleonmountain.com
+      secretName: wildcard-tls
+  rules:
+    - host: dashboard.chameleonmountain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: streamlit-trino-dashboard
+                port:
+                  number: 80
+
