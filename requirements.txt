@@ -1,0 +1,6 @@
+dagster==1.12.18
+requests
+trino
+pyarrow
+boto3
+pandas
