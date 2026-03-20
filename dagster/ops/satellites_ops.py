@@ -54,27 +54,29 @@ def parse_tle(text: str):
             continue
 
         rows.append(
-            {
-                "name": name,
-                "norad_id": norad_id,
-                "classification": classification,
-                "international_designator": international_designator,
-                "epoch": epoch,
-                "mean_motion_dot": mean_motion_dot,
-                "mean_motion_ddot": mean_motion_ddot,
-                "bstar": bstar,
-                "ephemeris_type": ephemeris_type,
-                "element_number": element_number,
-                "inclination": inclination,
-                "raan": raan,
-                "eccentricity": eccentricity,
-                "argument_of_perigee": argument_of_perigee,
-                "mean_anomaly": mean_anomaly,
-                "mean_motion": mean_motion,
-                "ingestion_time": ingestion_time,
-                "run_id": run_id,
-            }
-        )
+    {
+        "name": name,
+        "norad_id": norad_id,
+        "classification": classification,
+        "international_designator": international_designator,
+        "epoch": epoch,
+        "mean_motion_dot": mean_motion_dot,
+        "mean_motion_ddot": mean_motion_ddot,
+        "bstar": bstar,
+        "ephemeris_type": ephemeris_type,
+        "element_number": element_number,
+        "inclination": inclination,
+        "raan": raan,
+        "eccentricity": eccentricity,
+        "argument_of_perigee": argument_of_perigee,
+        "mean_anomaly": mean_anomaly,
+        "mean_motion": mean_motion,
+        "tle_line1": l1,
+        "tle_line2": l2,
+        "ingestion_time": ingestion_time,
+        "run_id": run_id,
+    }
+)
 
     return rows
 

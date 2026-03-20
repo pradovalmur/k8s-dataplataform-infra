@@ -4,3 +4,4 @@ trino
 pyarrow
 boto3
 pandas
+skyfield
