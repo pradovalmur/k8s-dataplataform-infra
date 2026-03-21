@@ -201,6 +201,16 @@ spec:
               value: http://minio.minio.svc.cluster.local:9000
             - name: S3_BUCKET
               value: analytics
+            - name: SPACE_TRACK_IDENTITY
+              valueFrom:
+                secretKeyRef:
+                  name: dagster-space-track
+                  key: SPACE_TRACK_IDENTITY
+            - name: SPACE_TRACK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dagster-space-track
+                  key: SPACE_TRACK_PASSWORD
           command:
             - dagster
           args:
