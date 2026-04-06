@@ -35,18 +35,35 @@ spec:
               value: iceberg
             - name: TRINO_SCHEMA
               value: space
+
           readinessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 8050
-            initialDelaySeconds: 10
+            initialDelaySeconds: 15
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
           livenessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 8050
-            initialDelaySeconds: 20
+            initialDelaySeconds: 30
             periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
 ---
 apiVersion: v1
 kind: Service
@@ -61,6 +78,7 @@ spec:
     - name: http
       port: 8050
       targetPort: 8050
+
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
