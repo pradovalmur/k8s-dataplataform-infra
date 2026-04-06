@@ -1,9 +1,15 @@
+import logging
+
 import pandas as pd
 from dash import Dash, dcc, html, Input, Output, dash_table
 import plotly.express as px
 import plotly.graph_objects as go
+from flask import jsonify
 
 from services.trino_queries import load_satellites, load_filter_values
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Dash(__name__)
 server = app.server
@@ -15,22 +21,53 @@ QUICK_TARGETS = {
     "Tiangong": ["TIANHE", "WENTIAN", "MENGTIAN", "TIANGONG"],
     "Hubble": ["HST", "HUBBLE"],
     "Starlink": ["STARLINK"],
-    "GPS": ["NAVSTAR", "GPS", "BIIR", "IIF", "III"],
+    "GPS": ["NAVSTAR"],
     "Galileo": ["GALILEO"],
 }
 
+STARLINK_GROUP_OPTIONS = [
+    {"label": "All", "value": "All"},
+    {"label": "53° shell", "value": "Starlink 53°"},
+    {"label": "43° shell", "value": "Starlink 43°"},
+    {"label": "70° shell", "value": "Starlink 70°"},
+    {"label": "Polar shell", "value": "Starlink Polar"},
+    {"label": "Other", "value": "Starlink Other"},
+]
+
+
+@server.route("/health")
+def health():
+    return jsonify({"status": "ok"}), 200
+
 
 def build_options(values):
-    return [{"label": v, "value": v} for v in values]
+    return [{"label": v, "value": v} for v in values if v is not None]
 
 
-filters = load_filter_values()
+def get_filters():
+    try:
+        filters = load_filter_values()
+        logger.info(
+            "Loaded filters: owner=%s object_type=%s",
+            len(filters.get("owner", [])),
+            len(filters.get("object_type", [])),
+        )
+        return filters
+    except Exception:
+        logger.exception("Failed to load filters from Trino")
+        return {
+            "owner": [],
+            "object_type": [],
+        }
+
+
+filters = get_filters()
 
 app.layout = html.Div(
     className="app-shell",
     children=[
         dcc.Store(id="satellite-data"),
-        dcc.Interval(id="auto-refresh", interval=60 * 1000, n_intervals=0),
+        dcc.Interval(id="auto-refresh", interval=300 * 1000, n_intervals=0),
         html.Div(
             className="content full-width",
             children=[
@@ -84,7 +121,7 @@ app.layout = html.Div(
                                                 html.Label("Owner"),
                                                 dcc.Dropdown(
                                                     id="owner-filter",
-                                                    options=build_options(filters["owner"]),
+                                                    options=build_options(filters.get("owner", [])),
                                                     multi=True,
                                                     placeholder="All owners",
                                                 ),
@@ -96,7 +133,7 @@ app.layout = html.Div(
                                                 html.Label("Object type"),
                                                 dcc.Dropdown(
                                                     id="object-type-filter",
-                                                    options=build_options(filters["object_type"]),
+                                                    options=build_options(filters.get("object_type", [])),
                                                     multi=True,
                                                     placeholder="All object types",
                                                 ),
@@ -116,6 +153,24 @@ app.layout = html.Div(
                                         ),
                                     ],
                                 ),
+                                html.Div(
+                                    id="starlink-subfilter-wrapper",
+                                    style={"display": "none", "marginTop": "16px"},
+                                    children=[
+                                        html.Div(
+                                            className="filter-block",
+                                            children=[
+                                                html.Label("Starlink group"),
+                                                dcc.Dropdown(
+                                                    id="starlink-group-filter",
+                                                    options=STARLINK_GROUP_OPTIONS,
+                                                    value="All",
+                                                    clearable=False,
+                                                ),
+                                            ],
+                                        )
+                                    ],
+                                ),
                             ],
                         )
                     ],
@@ -127,7 +182,14 @@ app.layout = html.Div(
                             className="card-header",
                             children=[html.H3("Global map")],
                         ),
-                        dcc.Graph(id="satellite-map", style={"height": "78vh"}),
+                        dcc.Graph(
+                            id="satellite-map",
+                            style={"height": "78vh"},
+                            config={
+                                "scrollZoom": False,
+                                "displayModeBar": True,
+                            },
+                        ),
                     ],
                 ),
                 html.Div(
@@ -181,13 +243,28 @@ def toggle_filters(n_clicks):
 
 
 @app.callback(
+    Output("starlink-subfilter-wrapper", "style"),
+    Input("quick-target-filter", "value"),
+)
+def toggle_starlink_subfilter(quick_target):
+    if quick_target == "Starlink":
+        return {"display": "block", "marginTop": "16px"}
+    return {"display": "none"}
+
+
+@app.callback(
     Output("satellite-data", "data"),
     Input("refresh-btn", "n_clicks"),
     Input("auto-refresh", "n_intervals"),
 )
 def refresh_data(_n_clicks, _n_intervals):
-    df = load_satellites()
-    return df.to_dict("records")
+    try:
+        df = load_satellites()
+        logger.info("Loaded %s satellites for dashboard", len(df))
+        return df.to_dict("records")
+    except Exception:
+        logger.exception("Failed to load satellite data from Trino")
+        return []
 
 
 @app.callback(
@@ -199,46 +276,115 @@ def refresh_data(_n_clicks, _n_intervals):
     Input("owner-filter", "value"),
     Input("object-type-filter", "value"),
     Input("quick-target-filter", "value"),
+    Input("starlink-group-filter", "value"),
 )
-def update_dashboard(data, owners, object_types, quick_target):
+def update_dashboard(data, owners, object_types, quick_target, starlink_group):
     df = pd.DataFrame(data or [])
 
     if df.empty:
         fig = px.scatter_mapbox(lat=[], lon=[], zoom=1)
         fig.update_layout(
-            mapbox_style="carto-positron",
+            mapbox=dict(
+                style="carto-positron",
+                center={"lat": 15, "lon": 0},
+                zoom=1,
+                bounds={
+                    "west": -180,
+                    "east": 180,
+                    "south": -75,
+                    "north": 85,
+                },
+            ),
             margin={"l": 0, "r": 0, "t": 0, "b": 0},
             paper_bgcolor="#eef4fb",
         )
-        return fig, [], [], []
+        empty_message = [
+            html.Div(
+                className="kpi-card",
+                children=[html.Span("Status"), html.H3("No data loaded")],
+            )
+        ]
+        return fig, [], [], empty_message
 
-    if owners:
+    if owners and "owner" in df.columns:
         df = df[df["owner"].isin(owners)]
 
-    if object_types:
+    if object_types and "object_type" in df.columns:
         df = df[df["object_type"].isin(object_types)]
 
-    if quick_target:
-        terms = QUICK_TARGETS.get(quick_target, [])
-        pattern = "|".join(terms)
-        df = df[df["object_name"].fillna("").str.upper().str.contains(pattern, regex=True)]
+    if quick_target and "object_name" in df.columns:
+        terms = [t.upper() for t in QUICK_TARGETS.get(quick_target, [])]
+        if terms:
+            mask = pd.Series(False, index=df.index)
+            names = df["object_name"].fillna("").astype(str).str.upper()
+            for term in terms:
+                mask = mask | names.str.contains(term, regex=False)
+            df = df[mask]
 
-    color_col = "object_type" if df["object_type"].notna().any() else None
+    if quick_target == "Starlink" and starlink_group and starlink_group != "All":
+        if "starlink_group" in df.columns:
+            df = df[df["starlink_group"] == starlink_group]
+
+    if df.empty:
+        fig = px.scatter_mapbox(lat=[], lon=[], zoom=1)
+        fig.update_layout(
+            mapbox=dict(
+                style="carto-positron",
+                center={"lat": 15, "lon": 0},
+                zoom=1,
+                bounds={
+                    "west": -180,
+                    "east": 180,
+                    "south": -75,
+                    "north": 85,
+                },
+            ),
+            margin={"l": 0, "r": 0, "t": 0, "b": 0},
+            paper_bgcolor="#eef4fb",
+        )
+        empty_message = [
+            html.Div(
+                className="kpi-card",
+                children=[html.Span("Status"), html.H3("No rows after filters")],
+            )
+        ]
+        return fig, [], [], empty_message
+
+    color_col = None
+    if "object_type" in df.columns and df["object_type"].notna().any():
+        color_col = "object_type"
+
+    custom_cols = []
+    for col in ["norad_id", "altitude_km", "velocity_km_s", "owner", "object_type"]:
+        if col in df.columns:
+            custom_cols.append(col)
+    if "starlink_group" in df.columns:
+        custom_cols.append("starlink_group")
+
+    hover_data = {
+        "latitude": False,
+        "longitude": False,
+    }
+    if "norad_id" in df.columns:
+        hover_data["norad_id"] = True
+    if "altitude_km" in df.columns:
+        hover_data["altitude_km"] = ":.2f"
+    if "velocity_km_s" in df.columns:
+        hover_data["velocity_km_s"] = ":.2f"
+    if "owner" in df.columns:
+        hover_data["owner"] = True
+    if "object_type" in df.columns:
+        hover_data["object_type"] = True
+    if "starlink_group" in df.columns:
+        hover_data["starlink_group"] = True
 
     fig = px.scatter_mapbox(
         df,
         lat="latitude",
         lon="longitude",
-        hover_name="object_name",
-        hover_data={
-            "norad_id": True,
-            "altitude_km": ":.2f",
-            "velocity_km_s": ":.2f",
-            "owner": True,
-            "object_type": True,
-            "latitude": False,
-            "longitude": False,
-        },
+        hover_name="object_name" if "object_name" in df.columns else None,
+        hover_data=hover_data,
+        custom_data=custom_cols if custom_cols else None,
         color=color_col,
         zoom=1,
         height=720,
@@ -246,7 +392,10 @@ def update_dashboard(data, owners, object_types, quick_target):
 
     fig.update_traces(marker={"size": 7, "opacity": 0.82})
 
-    iss_df = df[df["norad_id"] == 25544]
+    iss_df = pd.DataFrame()
+    if "norad_id" in df.columns:
+        iss_df = df[df["norad_id"] == 25544]
+
     if not iss_df.empty:
         fig.add_trace(
             go.Scattermapbox(
@@ -255,13 +404,23 @@ def update_dashboard(data, owners, object_types, quick_target):
                 mode="markers",
                 marker={"size": 16, "color": "#f59e0b"},
                 name="ISS",
-                text=iss_df["object_name"],
+                text=iss_df["object_name"] if "object_name" in iss_df.columns else None,
                 hovertemplate="<b>%{text}</b><extra>ISS</extra>",
             )
         )
 
     fig.update_layout(
-        mapbox_style="carto-positron",
+        mapbox=dict(
+            style="carto-positron",
+            center={"lat": 15, "lon": 0},
+            zoom=1,
+            bounds={
+                "west": -180,
+                "east": 180,
+                "south": -75,
+                "north": 85,
+            },
+        ),
         margin={"l": 0, "r": 0, "t": 0, "b": 0},
         paper_bgcolor="#eef4fb",
         plot_bgcolor="#eef4fb",
@@ -274,25 +433,29 @@ def update_dashboard(data, owners, object_types, quick_target):
         },
     )
 
-    table_cols = [
+    desired_table_cols = [
         "norad_id",
         "object_name",
         "owner",
         "object_type",
         "altitude_km",
         "velocity_km_s",
+        "starlink_group",
     ]
-    table_df = df[table_cols].copy().sort_values(
-        by=["altitude_km", "object_name"],
-        ascending=[False, True],
-    )
+    available_table_cols = [c for c in desired_table_cols if c in df.columns]
+    table_df = df[available_table_cols].copy()
+
+    sort_cols = [c for c in ["altitude_km", "object_name"] if c in table_df.columns]
+    if sort_cols:
+        ascending = [False if c == "altitude_km" else True for c in sort_cols]
+        table_df = table_df.sort_values(by=sort_cols, ascending=ascending)
 
     columns = [{"name": c, "id": c} for c in table_df.columns]
 
     total_satellites = len(df)
-    avg_altitude = round(df["altitude_km"].dropna().mean(), 2) if "altitude_km" in df else 0
-    avg_velocity = round(df["velocity_km_s"].dropna().mean(), 2) if "velocity_km_s" in df else 0
-    owners_count = int(df["owner"].nunique()) if "owner" in df else 0
+    avg_altitude = round(df["altitude_km"].dropna().mean(), 2) if "altitude_km" in df.columns else 0
+    avg_velocity = round(df["velocity_km_s"].dropna().mean(), 2) if "velocity_km_s" in df.columns else 0
+    owners_count = int(df["owner"].nunique()) if "owner" in df.columns else 0
     iss_present = "Yes" if not iss_df.empty else "No"
 
     kpis = [
@@ -321,17 +484,24 @@ def show_selected_satellite(click_data):
     custom = point.get("customdata", [])
     name = point.get("hovertext", "Unknown")
 
-    return html.Div(
-        className="details-grid",
-        children=[
-            html.Div(className="detail-item", children=[html.Span("Name"), html.Strong(name)]),
-            html.Div(className="detail-item", children=[html.Span("NORAD"), html.Strong(custom[0] if len(custom) > 0 else "")]),
-            html.Div(className="detail-item", children=[html.Span("Altitude (km)"), html.Strong(custom[1] if len(custom) > 1 else "")]),
-            html.Div(className="detail-item", children=[html.Span("Velocity (km/s)"), html.Strong(custom[2] if len(custom) > 2 else "")]),
-            html.Div(className="detail-item", children=[html.Span("Owner"), html.Strong(custom[3] if len(custom) > 3 else "")]),
-            html.Div(className="detail-item", children=[html.Span("Type"), html.Strong(custom[4] if len(custom) > 4 else "")]),
-        ],
-    )
+    details = [
+        html.Div(className="detail-item", children=[html.Span("Name"), html.Strong(name)]),
+        html.Div(className="detail-item", children=[html.Span("NORAD"), html.Strong(custom[0] if len(custom) > 0 else "")]),
+        html.Div(className="detail-item", children=[html.Span("Altitude (km)"), html.Strong(custom[1] if len(custom) > 1 else "")]),
+        html.Div(className="detail-item", children=[html.Span("Velocity (km/s)"), html.Strong(custom[2] if len(custom) > 2 else "")]),
+        html.Div(className="detail-item", children=[html.Span("Owner"), html.Strong(custom[3] if len(custom) > 3 else "")]),
+        html.Div(className="detail-item", children=[html.Span("Type"), html.Strong(custom[4] if len(custom) > 4 else "")]),
+    ]
+
+    if len(custom) > 5:
+        details.append(
+            html.Div(
+                className="detail-item",
+                children=[html.Span("Starlink group"), html.Strong(custom[5] if custom[5] else "-")],
+            )
+        )
+
+    return html.Div(className="details-grid", children=details)
 
 
 if __name__ == "__main__":
