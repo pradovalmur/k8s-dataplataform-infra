@@ -32,7 +32,7 @@ module "firewall" {
 
 resource "hcloud_ssh_key" "local_key" {
   name       = "local-ed25519"
-  public_key = file("~/.ssh/id_ed25519.pub")
+  public_key = file(pathexpand("~/.ssh/id_ed25519_pessoal.pub"))
 }
 
 module "hcloud_cluster" {
